@@ -30,3 +30,13 @@
 *.exe
 *.out
 *.app
+InteractiveHandTracking/.vs/InteractiveHandTracking/v14/.suo
+*.db
+*.user
+*.tlog
+*.log
+*.idb
+*.pdb
+*.ipdb
+*.iobj
+*.ilk
