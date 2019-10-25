@@ -1,16 +1,11 @@
-#include"RealSenseSR300.h"
+#include"InputManager.h"
+#include"OpenGL_Display.h"
 
-void main()
+void main(int argc, char** argv)
 {
-	Camera* mCamera = new Camera(REALTIME);
-	RealSenseSensor* mRealSenseSensor = new RealSenseSensor(mCamera);
+	InputManager* mInputManager = new InputManager(REALTIME);
 
-	mRealSenseSensor->start();
-
-	long long i = 0;
-	while (true)
-	{
-		i++;
-	}
-	cout << i << endl;
+	DS::mInputManager = mInputManager;
+	DS::init(argc, argv);
+	DS::start();
 }

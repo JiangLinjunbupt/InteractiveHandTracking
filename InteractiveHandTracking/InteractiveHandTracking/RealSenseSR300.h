@@ -16,16 +16,7 @@ public:
 	const int BACK_BUFFER = 1;
 	const int FRONT_BUFFER = 0;
 
-	cv::Mat color_array[2];
-	cv::Mat depth_array[2];
-	cv::Mat silhouette_array[2];
-
-	int *idxs_image_BACK_BUFFER;
-	int *idxs_image_FRONT_BUFFER;
-
-	Eigen::RowVector3f palm_center[2];
-
-	pcl::PointCloud<pcl::PointXYZ> handPointCloud[2];
+	Image_InputData m_Image_InputData[2];
 protected:
 	bool initialized;
 	Camera* camera;
@@ -35,7 +26,7 @@ protected:
 public:
 	RealSenseSensor(Camera* _camera, int maxPixelNUM = 192);
 	~RealSenseSensor();
-	//bool concurrent_fetch_streams(Image_InputData& inputdata);
+	bool concurrent_fetch_streams(Image_InputData& inputdata);
 	bool start();
 
 private:
@@ -51,4 +42,5 @@ private:
 	bool SegHand(cv::Mat& depth, cv::Mat& hsv, cv::Mat& HandSegFromRealSense, bool is_handSegFromRealsense, cv::Mat& handMask);
 	bool SegObject(cv::Mat& depth, cv::Mat& hsv, cv::Mat& objectMask);
 
+	void DepthToPointCloud(Image_InputData& image_inputData);
 };

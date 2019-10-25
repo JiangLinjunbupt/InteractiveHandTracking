@@ -99,32 +99,12 @@ bool RealSenseSensor::initialize()
 	if (!initialized)
 	{
 		currentFrame_idx = 0;
-		color_array[FRONT_BUFFER] = cv::Mat(cv::Size(OSRC_COLS, OSRC_ROWS), CV_8UC3, cv::Scalar(0, 0, 0));
-		color_array[BACK_BUFFER] = cv::Mat(cv::Size(OSRC_COLS, OSRC_ROWS), CV_8UC3, cv::Scalar(0, 0, 0));
-
-		depth_array[FRONT_BUFFER] = cv::Mat(cv::Size(OSRC_COLS, OSRC_ROWS), CV_16UC1, cv::Scalar(0));
-		depth_array[BACK_BUFFER] = cv::Mat(cv::Size(OSRC_COLS, OSRC_ROWS), CV_16UC1, cv::Scalar(0));
-
-		silhouette_array[FRONT_BUFFER] = cv::Mat(cv::Size(OSRC_COLS, OSRC_ROWS), CV_8UC1, cv::Scalar(0));
-		silhouette_array[BACK_BUFFER] = cv::Mat(cv::Size(OSRC_COLS, OSRC_ROWS), CV_8UC1, cv::Scalar(0));
-
-		idxs_image_FRONT_BUFFER = new int[OSRC_COLS * OSRC_ROWS];
-		idxs_image_BACK_BUFFER = new int[OSRC_COLS * OSRC_ROWS];
-
-		palm_center[FRONT_BUFFER] = Eigen::RowVector3f::Zero();
-		palm_center[BACK_BUFFER] = Eigen::RowVector3f::Zero();
-
-		handPointCloud[FRONT_BUFFER].points.clear();
-		handPointCloud[BACK_BUFFER].points.clear();
-
-		handPointCloud[FRONT_BUFFER].points.reserve(OSRC_COLS*OSRC_ROWS);
-		handPointCloud[BACK_BUFFER].points.reserve(OSRC_COLS*OSRC_ROWS);
-
+		m_Image_InputData[FRONT_BUFFER].Init(camera->width(), camera->height());
+		m_Image_InputData[BACK_BUFFER].Init(camera->width(), camera->height());
 	}
 
 	sensor_thread_realsense = std::thread(&RealSenseSensor::run, this);
 	sensor_thread_realsense.detach();
-	//this->run();
 
 	this->initialized = true;
 	std::cout << "SensorRealSense Initialization Success ! " << std::endl;
@@ -132,30 +112,23 @@ bool RealSenseSensor::initialize()
 	return true;
 }
 
+bool RealSenseSensor::concurrent_fetch_streams(Image_InputData& inputdata)
+{
+	if (currentFrame_idx > 0)
+	{
+		std::unique_lock<std::mutex> lock(swap_mutex_realsense);
+		condition_realsense.wait(lock, [] {return thread_released_realsense; });
+		main_released_realsense = false;
 
-//bool RealSenseSensor::concurrent_fetch_streams(InputData& inputdata)
-//{
-//	if (currentFrame_idx > 0)
-//	{
-//		std::unique_lock<std::mutex> lock(swap_mutex_realsense);
-//		condition_realsense.wait(lock, [] {return thread_released_realsense; });
-//		main_released_realsense = false;
-//
-//		inputdata.image_data.color = color_array[FRONT_BUFFER].clone();
-//		inputdata.image_data.depth = depth_array[FRONT_BUFFER].clone();
-//		inputdata.image_data.silhouette = silhouette_array[FRONT_BUFFER].clone();
-//		std::copy(idxs_image_FRONT_BUFFER, idxs_image_FRONT_BUFFER + OSRC_COLS * OSRC_ROWS, inputdata.image_data.idxs_image);
-//
-//		inputdata.image_data.palm_Center = palm_center[FRONT_BUFFER];
-//		inputdata.image_data.pointcloud.points.assign(handPointCloud[FRONT_BUFFER].points.begin(), handPointCloud[FRONT_BUFFER].points.end());
-//
-//		main_released_realsense = true;
-//		lock.unlock();
-//		condition_realsense.notify_all();
-//		return true;
-//	}
-//	return  false;
-//}
+		inputdata = m_Image_InputData[FRONT_BUFFER];
+
+		main_released_realsense = true;
+		lock.unlock();
+		condition_realsense.notify_all();
+		return true;
+	}
+	return  false;
+}
 
 bool RealSenseSensor::run()
 {
@@ -213,6 +186,7 @@ bool RealSenseSensor::run()
 		int downsampling_factor = 2;
 		cv::Mat MaskFromRealSense = cv::Mat(cv::Size(D_width / downsampling_factor, D_height / downsampling_factor), CV_8UC1, cv::Scalar(0));
 		cv::Mat sensor_depth = cv::Mat(cv::Size(D_width / downsampling_factor, D_height / downsampling_factor), CV_16UC1, cv::Scalar(0));
+		cv::Mat sensor_color = cv::Mat(cv::Size(D_width / downsampling_factor, D_height / downsampling_factor), CV_8UC3, cv::Scalar(0,0,0));
 
 		while (true)
 		{
@@ -235,23 +209,48 @@ bool RealSenseSensor::run()
 					outputData->Update();
 					PXCHandData::ExtremityData RightPalmCenter; //记得中心点的2D坐标要的xy要除以2；
 					bool is_GetHandSegFromRealSense = GetHandSegFromRealSense(MaskFromRealSense, Handsample->depth, outputData, RightPalmCenter);
-
-					if (is_GetHandSegFromRealSense) {
-						cv::imshow("来自realsense的mask", MaskFromRealSense);
-					}
-
-					bool is_GetDepthAndColor = GetColorAndDepthImage(sensor_depth, color_array[BACK_BUFFER], projection, Imagesample->depth, Imagesample->color);
+					bool is_GetDepthAndColor = GetColorAndDepthImage(sensor_depth, sensor_color, projection, Imagesample->depth, Imagesample->color);
+					
 					if (is_GetDepthAndColor) {
-						cv::imshow("彩色图", color_array[BACK_BUFFER]);
-
 						cv::Mat objecMask = cv::Mat(cv::Size(D_width / downsampling_factor, D_height / downsampling_factor), CV_8UC1, cv::Scalar(0));
 						cv::Mat handMask = cv::Mat(cv::Size(D_width / downsampling_factor, D_height / downsampling_factor), CV_8UC1, cv::Scalar(0));
 						std::pair<bool, bool> segResult;
-						segResult = SegObjectAndHand(MaskFromRealSense, color_array[BACK_BUFFER], sensor_depth, is_GetHandSegFromRealSense, objecMask, handMask);
+						segResult = SegObjectAndHand(MaskFromRealSense, sensor_color, sensor_depth, is_GetHandSegFromRealSense, objecMask, handMask);
 
-						cv::imshow("物体分割", objecMask);
-						cv::imshow("人手分割", handMask);
-						cv::waitKey(10);
+						//给乒乓缓存赋值
+						cv::flip(sensor_depth, m_Image_InputData[BACK_BUFFER].depth, -1);
+						cv::flip(sensor_color, m_Image_InputData[BACK_BUFFER].color, -1);
+
+						cv::flip(objecMask, m_Image_InputData[BACK_BUFFER].item.silhouette, -1);
+						cv::flip(handMask, m_Image_InputData[BACK_BUFFER].hand.silhouette, -1);
+
+						m_Image_InputData[BACK_BUFFER].silhouette = m_Image_InputData[BACK_BUFFER].item.silhouette.clone();
+						m_Image_InputData[BACK_BUFFER].silhouette.setTo(255, m_Image_InputData[BACK_BUFFER].hand.silhouette == 255);
+
+						m_Image_InputData[BACK_BUFFER].item.is_found = segResult.first;
+						m_Image_InputData[BACK_BUFFER].item.depth = m_Image_InputData[BACK_BUFFER].depth.clone();
+						m_Image_InputData[BACK_BUFFER].item.depth.setTo(0, m_Image_InputData[BACK_BUFFER].item.silhouette == 0);
+
+						m_Image_InputData[BACK_BUFFER].hand.is_found = segResult.second;
+						m_Image_InputData[BACK_BUFFER].hand.depth = m_Image_InputData[BACK_BUFFER].depth.clone();
+						m_Image_InputData[BACK_BUFFER].hand.depth.setTo(0, m_Image_InputData[BACK_BUFFER].hand.silhouette == 0);
+
+						//点云转换
+						DepthToPointCloud(m_Image_InputData[BACK_BUFFER]);
+
+						//交换数据
+						{
+							std::unique_lock<std::mutex> lock(swap_mutex_realsense);
+							condition_realsense.wait(lock, [] {return main_released_realsense; });
+							thread_released_realsense = false;
+
+							m_Image_InputData[FRONT_BUFFER] = m_Image_InputData[BACK_BUFFER];
+							currentFrame_idx++;
+
+							thread_released_realsense = true;
+							lock.unlock();
+							condition_realsense.notify_all();
+						}
 					}
 				}
 			}
@@ -384,7 +383,7 @@ bool RealSenseSensor::GetColorAndDepthImage(cv::Mat& depthImg, cv::Mat& colorImg
 bool RealSenseSensor::SegObject(cv::Mat& depth, cv::Mat& hsv, cv::Mat& objectMask)
 {
 	//黄色的小球的阈值
-	int object_hmin = 40, object_smin = 150, object_vmin = 0;
+	int object_hmin = 40, object_smin = 120, object_vmin = 0;
 	int object_hmax = 100, object_smax = 255, object_vmax = 255;
 
 	int s_Max = 255;
@@ -620,4 +619,127 @@ std::pair<bool, bool> RealSenseSensor::SegObjectAndHand(cv::Mat& HandSegFromReal
 
 	return segResult;
 }
+
+void RealSenseSensor::DepthToPointCloud(Image_InputData& image_inputData)
+{
+	image_inputData.item.pointcloud.points.clear();
+	image_inputData.hand.pointcloud.points.clear();
+
+	int cols = image_inputData.depth.cols;
+	int rows = image_inputData.depth.rows;
+	Vector3 v0, v1, v2, v3, v4, v5, v6, v7, v8;
+	Vector3 vn1, vn2, vn3, vn4, vn5, vn6, vn7, vn8;
+	
+	//下采样率：
+	int DownSampleRate;
+	int NonZero = cv::countNonZero(image_inputData.silhouette);
+	if (NonZero > MaxPixelNUM)
+		DownSampleRate = sqrt(NonZero / MaxPixelNUM);
+	else
+		DownSampleRate = 1;
+
+	for(int row = 1;row<rows-1;row += DownSampleRate)
+		for (int col = 1; col < cols-1; col += DownSampleRate) {
+			//对人手分别处理
+			if (image_inputData.hand.silhouette.at<uchar>(row, col) == 255)
+			{
+				v0 = camera->depth_to_world(col, row, image_inputData.depth.at<ushort>(row, col));
+
+				v1 = camera->depth_to_world(col - 1, row - 1, image_inputData.depth.at<ushort>(row - 1, col - 1));
+				v2 = camera->depth_to_world(col + 0, row - 1, image_inputData.depth.at<ushort>(row - 1, col + 0));
+				v3 = camera->depth_to_world(col + 1, row - 1, image_inputData.depth.at<ushort>(row - 1, col + 1));
+				v4 = camera->depth_to_world(col + 1, row + 0, image_inputData.depth.at<ushort>(row + 0, col + 1));
+				v5 = camera->depth_to_world(col + 1, row + 1, image_inputData.depth.at<ushort>(row + 1, col + 1));
+				v6 = camera->depth_to_world(col + 0, row + 1, image_inputData.depth.at<ushort>(row + 1, col + 0));
+				v7 = camera->depth_to_world(col - 1, row + 1, image_inputData.depth.at<ushort>(row + 1, col - 1));
+				v8 = camera->depth_to_world(col - 1, row + 0, image_inputData.depth.at<ushort>(row + 0, col - 1));
+
+				v1 = v1 - v0;
+				v2 = v2 - v0;
+				v3 = v3 - v0;
+				v4 = v4 - v0;
+				v5 = v5 - v0;
+				v6 = v6 - v0;
+				v7 = v7 - v0;
+				v8 = v8 - v0;
+
+				vn1 = v1.cross(v2); vn1.normalize();
+				vn2 = v2.cross(v3); vn2.normalize();
+				vn3 = v3.cross(v4); vn3.normalize();
+				vn4 = v4.cross(v5); vn4.normalize();
+
+				vn5 = v5.cross(v6); vn5.normalize();
+				vn6 = v6.cross(v7); vn6.normalize();
+				vn7 = v7.cross(v8); vn7.normalize();
+				vn8 = v8.cross(v1); vn8.normalize();
+
+				vn1 = vn1 + vn2 + vn3 + vn4 + vn5 + vn6 + vn7 + vn8;
+				vn1.normalize();
+				if (vn1.z() > 0) vn1 = -vn1;
+
+				pcl::PointNormal p;
+				p.x = v0.x();
+				p.y = v0.y();
+				p.z = v0.z();
+				p.normal_x = vn1.x();
+				p.normal_y = vn1.y();
+				p.normal_z = vn1.z();
+
+				image_inputData.hand.pointcloud.points.emplace_back(p);
+			}
+		}
+
+	int ObjectDownSampleRate = 2;
+	for (int row = 1; row<rows - 1; row += ObjectDownSampleRate)
+		for (int col = 1; col < cols - 1; col += ObjectDownSampleRate) {
+			//对物体处理
+			if (image_inputData.item.silhouette.at<uchar>(row, col) == 255)
+			{
+				v0 = camera->depth_to_world(col, row, image_inputData.depth.at<ushort>(row, col));
+
+				v1 = camera->depth_to_world(col - 1, row - 1, image_inputData.depth.at<ushort>(row - 1, col - 1));
+				v2 = camera->depth_to_world(col + 0, row - 1, image_inputData.depth.at<ushort>(row - 1, col + 0));
+				v3 = camera->depth_to_world(col + 1, row - 1, image_inputData.depth.at<ushort>(row - 1, col + 1));
+				v4 = camera->depth_to_world(col + 1, row + 0, image_inputData.depth.at<ushort>(row + 0, col + 1));
+				v5 = camera->depth_to_world(col + 1, row + 1, image_inputData.depth.at<ushort>(row + 1, col + 1));
+				v6 = camera->depth_to_world(col + 0, row + 1, image_inputData.depth.at<ushort>(row + 1, col + 0));
+				v7 = camera->depth_to_world(col - 1, row + 1, image_inputData.depth.at<ushort>(row + 1, col - 1));
+				v8 = camera->depth_to_world(col - 1, row + 0, image_inputData.depth.at<ushort>(row + 0, col - 1));
+
+				v1 = v1 - v0;
+				v2 = v2 - v0;
+				v3 = v3 - v0;
+				v4 = v4 - v0;
+				v5 = v5 - v0;
+				v6 = v6 - v0;
+				v7 = v7 - v0;
+				v8 = v8 - v0;
+
+				vn1 = v1.cross(v2); vn1.normalize();
+				vn2 = v2.cross(v3); vn2.normalize();
+				vn3 = v3.cross(v4); vn3.normalize();
+				vn4 = v4.cross(v5); vn4.normalize();
+
+				vn5 = v5.cross(v6); vn5.normalize();
+				vn6 = v6.cross(v7); vn6.normalize();
+				vn7 = v7.cross(v8); vn7.normalize();
+				vn8 = v8.cross(v1); vn8.normalize();
+
+				vn1 = vn1 + vn2 + vn3 + vn4 + vn5 + vn6 + vn7 + vn8;
+				vn1.normalize();
+				if (vn1.z() > 0) vn1 = -vn1;
+
+				pcl::PointNormal p;
+				p.x = v0.x();
+				p.y = v0.y();
+				p.z = v0.z();
+				p.normal_x = vn1.x();
+				p.normal_y = vn1.y();
+				p.normal_z = vn1.z();
+
+				image_inputData.item.pointcloud.points.emplace_back(p);
+			}
+		}
+}
+
 #pragma endregion UntilFunction

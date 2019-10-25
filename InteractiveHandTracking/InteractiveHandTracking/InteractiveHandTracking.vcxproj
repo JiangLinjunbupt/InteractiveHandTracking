@@ -95,11 +95,15 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="Camera.h" />
+    <ClInclude Include="InputManager.h" />
+    <ClInclude Include="OpenGL_Display.h" />
     <ClInclude Include="RealSenseSR300.h" />
     <ClInclude Include="Types.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Camera.cpp" />
+    <ClCompile Include="InputManager.cpp" />
+    <ClCompile Include="OpenGL_Display.cpp" />
     <ClCompile Include="RealSenseSR300.cpp" />
     <ClCompile Include="源.cpp" />
   </ItemGroup>
