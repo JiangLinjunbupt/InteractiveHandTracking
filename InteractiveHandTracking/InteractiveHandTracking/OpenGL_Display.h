@@ -34,6 +34,7 @@ namespace DS {
 	void draw_ObjectCloud();
 	void draw_ObjectCloudNormal();
 	void draw_Coordinate();
+	void draw_Sphere();
 	void draw();
 
 	//OpenGL¿ØÖÆº¯Êý

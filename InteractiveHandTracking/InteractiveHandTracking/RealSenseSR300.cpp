@@ -394,10 +394,10 @@ bool RealSenseSensor::SegObject(cv::Mat& depth, cv::Mat& hsv, cv::Mat& objectMas
 		cv::Scalar(object_hmax, object_smax / float(s_Max), object_vmax / float(v_Max)),
 		objectMask);
 
-	//经过一次形态学腐蚀膨胀，去除空洞
-	int Object_DILATION_SIZE = 2;
-	cv::Mat element = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(2 * Object_DILATION_SIZE + 1, 2 * Object_DILATION_SIZE + 1));
-	cv::dilate(objectMask, objectMask, element);
+	////经过一次形态学腐蚀膨胀，去除空洞
+	//int Object_DILATION_SIZE = 1;
+	//cv::Mat element = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(2 * Object_DILATION_SIZE + 1, 2 * Object_DILATION_SIZE + 1));
+	//cv::dilate(objectMask, objectMask, element);
 
 	if (cv::countNonZero(objectMask) > 30) return true;
 	else return false;
@@ -630,6 +630,17 @@ void RealSenseSensor::DepthToPointCloud(Image_InputData& image_inputData)
 	Vector3 v0, v1, v2, v3, v4, v5, v6, v7, v8;
 	Vector3 vn1, vn2, vn3, vn4, vn5, vn6, vn7, vn8;
 	
+	Vector3 object_center = Vector3::Zero();
+	Vector3 hand_center = Vector3::Zero();
+	int object_count = 0;
+	int hand_count = 0;
+
+	//寻找物体和人手的最小内接圆，用这个内接圆内的数据计算位置
+	float Object_InscribCircleradius = 0; Vector2 Object_InscribCirclecenter = Vector2::Zero();
+	FindInscribedCircle(image_inputData.item.silhouette, Object_InscribCircleradius, Object_InscribCirclecenter);
+	float Hand_InscribCircleradius = 0; Vector2 Hand_InscribCirclecenter = Vector2::Zero();
+	FindInscribedCircle(image_inputData.hand.silhouette, Hand_InscribCircleradius, Hand_InscribCirclecenter);
+
 	//下采样率：
 	int DownSampleRate;
 	int NonZero = cv::countNonZero(image_inputData.silhouette);
@@ -686,8 +697,20 @@ void RealSenseSensor::DepthToPointCloud(Image_InputData& image_inputData)
 				p.normal_z = vn1.z();
 
 				image_inputData.hand.pointcloud.points.emplace_back(p);
+
+				float distance = (row - Hand_InscribCirclecenter.y())*(row - Hand_InscribCirclecenter.y()) +
+					(col - Hand_InscribCirclecenter.x())*(col - Hand_InscribCirclecenter.x());
+
+				if (distance < Hand_InscribCircleradius*Hand_InscribCircleradius)
+				{
+					hand_center += v0;
+					hand_count++;
+				}
 			}
 		}
+
+	if (hand_count > 0) hand_center /= hand_count;
+	image_inputData.hand.center = hand_center;
 
 	int ObjectDownSampleRate = 2;
 	for (int row = 1; row<rows - 1; row += ObjectDownSampleRate)
@@ -738,8 +761,62 @@ void RealSenseSensor::DepthToPointCloud(Image_InputData& image_inputData)
 				p.normal_z = vn1.z();
 
 				image_inputData.item.pointcloud.points.emplace_back(p);
+
+				float distance = (row - Object_InscribCirclecenter.y())*(row - Object_InscribCirclecenter.y()) +
+					(col - Object_InscribCirclecenter.x())*(col - Object_InscribCirclecenter.x());
+
+				if (distance < Object_InscribCircleradius*Object_InscribCircleradius)
+				{
+					object_center += v0;
+					object_count++;
+				}
 			}
 		}
+
+	if (object_count > 0) object_center /= object_count;
+	image_inputData.item.center = object_center;
+}
+
+void RealSenseSensor::FindInscribedCircle(cv::Mat& silhouette, float& radius, Vector2& center)
+{
+	int cols = silhouette.cols;
+	int rows = silhouette.rows;
+
+	cv::Moments m = cv::moments(silhouette, true);
+	int center_x = m.m10 / m.m00;
+	int center_y = m.m01 / m.m00;
+
+	cv::Mat dist_image;
+	cv::distanceTransform(silhouette, dist_image, CV_DIST_L2, 3);
+
+	int search_area_min_col = center_x - 30 > 0 ? center_x - 30 : 0;
+	int search_area_max_col = center_x + 30 > cols ? cols - 1 : center_x + 30;
+
+	int search_area_min_row = center_y - 30 > 0 ? center_y - 30 : 0;
+	int search_area_max_row = center_y + 30 > rows ? rows - 1 : center_y + 30;
+
+	int temp = 0, R = 0, cx = 0, cy = 0;
+
+	for (int row = search_area_min_row; row < search_area_max_row; row++)
+	{
+		for (int col = search_area_min_col; col < search_area_max_col; col++)
+		{
+			if (silhouette.at<uchar>(row, col) != 0)
+			{
+				temp = (int)dist_image.ptr<float>(row)[col];
+				if (temp > R)
+				{
+					R = temp;
+					cy = row;
+					cx = col;
+				}
+			}
+		}
+	}
+
+	radius = R;
+	center.x() = cx;
+	center.y() = cy;
 }
 
 #pragma endregion UntilFunction

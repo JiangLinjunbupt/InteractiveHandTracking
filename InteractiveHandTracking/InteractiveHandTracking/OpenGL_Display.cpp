@@ -106,7 +106,7 @@ namespace DS
 		glDisable(GL_LIGHTING);
 		if (mInputManager->mImage_InputData.item.pointcloud.points.size() > 0)
 		{
-			glColor3f(0.5f, 0.5f, 0.0f);
+			glColor3f(1.0f, 1.0f, 0.0f);
 			for (int i = 0; i < mInputManager->mImage_InputData.item.pointcloud.points.size(); i++) {
 				glPushMatrix();
 				glTranslatef(mInputManager->mImage_InputData.item.pointcloud.points[i].x,
@@ -117,8 +117,28 @@ namespace DS
 			}
 		}
 	}
+	void draw_Sphere()
+	{
+		glEnable(GL_LIGHT0);
+		glEnable(GL_LIGHTING);
+		GLfloat Sphere_ambient[] = { 1,1,0,1 };
+		GLfloat Sphere_specular[] = { 0.5, 0.5, 0.5, 1.0 };
+		GLfloat Sphere_shin[] = { 10 };
+		glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, Sphere_ambient);
+		glMaterialfv(GL_FRONT, GL_SPECULAR, Sphere_specular);
+		glMaterialfv(GL_FRONT, GL_SHININESS, Sphere_shin);
+
+		glPushMatrix();
+		glTranslatef(mInputManager->mImage_InputData.item.center(0),
+			mInputManager->mImage_InputData.item.center(1),
+			mInputManager->mImage_InputData.item.center(2));
+		glutSolidSphere(25, 20, 20);
+		glPopMatrix();
+	}
 	void draw_HandPointCloudNormal()
 	{
+		glDisable(GL_LIGHT0);
+		glDisable(GL_LIGHTING);
 		if (mInputManager->mImage_InputData.hand.pointcloud.points.size() > 0)
 		{
 			int scale = 20;
@@ -138,6 +158,8 @@ namespace DS
 	}
 	void draw_ObjectCloudNormal()
 	{
+		glDisable(GL_LIGHT0);
+		glDisable(GL_LIGHTING);
 		if (mInputManager->mImage_InputData.item.pointcloud.points.size() > 0)
 		{
 			int scale = 20;
@@ -236,11 +258,11 @@ namespace DS
 		gluLookAt(x + control.gx, y + control.gy, z + control.gz, control.gx, control.gy, control.gz, 0.0, 1.0, 0.0);//个人理解最开始是看向-z的，之后的角度是在global中心上叠加的，所以要加
 
 		draw_HandPointCloud();
-		draw_HandPointCloudNormal();
+		//draw_HandPointCloudNormal();
 		draw_ObjectCloud();
-		//draw_ObjectCloudNormal();
+		draw_ObjectCloudNormal();
 		draw_Coordinate();
-
+		draw_Sphere();
 		glFlush();
 		glutSwapBuffers();
 	}

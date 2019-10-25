@@ -43,4 +43,5 @@ private:
 	bool SegObject(cv::Mat& depth, cv::Mat& hsv, cv::Mat& objectMask);
 
 	void DepthToPointCloud(Image_InputData& image_inputData);
+	void FindInscribedCircle(cv::Mat& silhouette, float& radius, Vector2& center);
 };
