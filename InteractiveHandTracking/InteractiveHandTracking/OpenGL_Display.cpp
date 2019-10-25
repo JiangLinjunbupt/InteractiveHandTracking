@@ -4,6 +4,7 @@
 namespace DS
 {
 	InputManager* mInputManager;
+
 	bool show_handmodel = true;
 	bool pause = false;
 	bool track = true;
@@ -257,12 +258,13 @@ namespace DS
 		//cout<< x <<" "<< y <<" " << z<<endl;
 		gluLookAt(x + control.gx, y + control.gy, z + control.gz, control.gx, control.gy, control.gz, 0.0, 1.0, 0.0);//个人理解最开始是看向-z的，之后的角度是在global中心上叠加的，所以要加
 
-		draw_HandPointCloud();
+		//draw_HandPointCloud();
 		//draw_HandPointCloudNormal();
-		draw_ObjectCloud();
-		draw_ObjectCloudNormal();
-		draw_Coordinate();
-		draw_Sphere();
+		//draw_ObjectCloud();
+		//draw_ObjectCloudNormal();
+		//draw_Coordinate();
+		//draw_Sphere();
+
 		glFlush();
 		glutSwapBuffers();
 	}
@@ -273,6 +275,7 @@ namespace DS
 		{
 			mInputManager->ShowImage_input(true, true, true);
 		}
+
 		glutPostRedisplay();
 	}
 

@@ -6,6 +6,7 @@
 #include<chrono>
 
 #include"InputManager.h"
+#include"Interacted_Object.h"
 
 using namespace std::chrono;
 namespace DS {
