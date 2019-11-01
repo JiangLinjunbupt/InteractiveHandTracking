@@ -33,6 +33,18 @@
     <ClInclude Include="Interacted_Object.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="TrackingManager.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="SolverManager.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="Worker.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="DistanceTransform.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Camera.cpp">
@@ -51,6 +63,18 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="YellowSpere.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="TrackingManager.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="SolverManager.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="Worker.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="RedCube.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

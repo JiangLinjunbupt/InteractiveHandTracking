@@ -5,13 +5,13 @@
 #include<vector>
 #include<chrono>
 
-#include"InputManager.h"
-#include"Interacted_Object.h"
+#include"TrackingManager.h"
 
 using namespace std::chrono;
 namespace DS {
-	extern InputManager* mInputManager;
+	extern TrackingManager* mTrackingManager;
 
+	extern Eigen::VectorXf previous_params;
 	extern bool show_handmodel;
 	extern bool pause;
 	extern bool track;
@@ -35,7 +35,8 @@ namespace DS {
 	void draw_ObjectCloud();
 	void draw_ObjectCloudNormal();
 	void draw_Coordinate();
-	void draw_Sphere();
+
+	void draw_Interacted_Object();
 	void draw();
 
 	//OpenGL¿ØÖÆº¯Êý

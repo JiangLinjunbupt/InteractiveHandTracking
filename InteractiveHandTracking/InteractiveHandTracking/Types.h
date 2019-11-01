@@ -20,8 +20,10 @@ using namespace std::chrono;
 
 #define M_PI 3.14159265358979323846
 
-#define ANGLE_TO_RADIUS 0.017453;
-#define RADIUS_TO_ANGLE 57.2974;
+#define ANGLE_TO_RADIUS 0.017453
+#define RADIUS_TO_ANGLE 57.2974
+
+#define NUM_OBJECT_PARAMS 6
 
 typedef Eigen::Matrix4f Matrix4;
 typedef Eigen::Matrix<float, 3, 3> Matrix3;
@@ -37,6 +39,29 @@ typedef Eigen::Vector3f Vector3;
 inline float nan() { return (std::numeric_limits<float>::quiet_NaN)(); }
 inline float inf() { return (std::numeric_limits<float>::max)(); }
 
+/// Linear system lhs*x=rhs
+struct LinearSystem {
+	Matrix_MxN lhs; // J^T*J
+	VectorN rhs; // J^T*r
+	LinearSystem() {}
+	LinearSystem(int n) {
+		lhs = Matrix_MxN::Zero(n, n);
+		rhs = VectorN::Zero(n);
+	}
+};
+
+struct DataAndCorrespond
+{
+	Vector3 pointcloud;
+	int pointcloud_idx;
+
+	Vector3 correspond;
+	int correspond_idx;
+
+	bool is_match;
+};
+
+enum Object_type { yellowSphere, redCube };
 
 enum RuntimeType
 {
@@ -98,6 +123,8 @@ struct Image_InputData
 	cv::Mat depth;
 	cv::Mat silhouette;
 
+	int *idxs_image;
+
 	Object_input hand;
 	Object_input item;
 
@@ -110,6 +137,7 @@ struct Image_InputData
 		depth = cv::Mat(cv::Size(width, height), CV_16UC1, cv::Scalar(0));
 		silhouette = cv::Mat(cv::Size(width, height), CV_8UC1, cv::Scalar(0));
 
+		idxs_image = new int[W*H]();
 		hand.Init(W, H);
 		item.Init(W, H);
 	}
@@ -125,5 +153,7 @@ struct Image_InputData
 
 		hand = image_input.hand;
 		item = image_input.item;
+
+		std::copy(image_input.idxs_image, image_input.idxs_image + width * height, idxs_image);
 	}
 };

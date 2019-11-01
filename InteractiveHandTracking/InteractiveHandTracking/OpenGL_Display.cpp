@@ -3,11 +3,12 @@
 
 namespace DS
 {
-	InputManager* mInputManager;
+	TrackingManager* mTrackingManager;
 
+	Eigen::VectorXf previous_params;
 	bool show_handmodel = true;
 	bool pause = false;
-	bool track = true;
+	bool track = false;
 	int idx = 0;
 	Control control;
 
@@ -88,14 +89,15 @@ namespace DS
 	{
 		glDisable(GL_LIGHT0);
 		glDisable(GL_LIGHTING);
-		if (mInputManager->mImage_InputData.hand.pointcloud.points.size() > 0)
+		int size = mTrackingManager->mInputManager->mImage_InputData.hand.pointcloud.points.size();
+		if (size > 0)
 		{
 			glColor3f(0.0f, 1.0f, 0.0f);
-			for (int i = 0; i < mInputManager->mImage_InputData.hand.pointcloud.points.size(); i++) {
+			for (int i = 0; i < size; i++) {
 				glPushMatrix();
-				glTranslatef(mInputManager->mImage_InputData.hand.pointcloud.points[i].x,
-					mInputManager->mImage_InputData.hand.pointcloud.points[i].y,
-					mInputManager->mImage_InputData.hand.pointcloud.points[i].z);
+				glTranslatef(mTrackingManager->mInputManager->mImage_InputData.hand.pointcloud.points[i].x,
+					mTrackingManager->mInputManager->mImage_InputData.hand.pointcloud.points[i].y,
+					mTrackingManager->mInputManager->mImage_InputData.hand.pointcloud.points[i].z);
 				glutSolidSphere(2, 10, 10);
 				glPopMatrix();
 			}
@@ -105,54 +107,40 @@ namespace DS
 	{
 		glDisable(GL_LIGHT0);
 		glDisable(GL_LIGHTING);
-		if (mInputManager->mImage_InputData.item.pointcloud.points.size() > 0)
+		int size = mTrackingManager->mInputManager->mImage_InputData.item.pointcloud.points.size();
+		if (size > 0)
 		{
-			glColor3f(1.0f, 1.0f, 0.0f);
-			for (int i = 0; i < mInputManager->mImage_InputData.item.pointcloud.points.size(); i++) {
-				glPushMatrix();
-				glTranslatef(mInputManager->mImage_InputData.item.pointcloud.points[i].x,
-					mInputManager->mImage_InputData.item.pointcloud.points[i].y,
-					mInputManager->mImage_InputData.item.pointcloud.points[i].z);
-				glutSolidSphere(2, 10, 10);
-				glPopMatrix();
+			glPointSize(5);
+			glColor3f(mTrackingManager->mInteracted_Object->mObject_attribute.color(0),
+				mTrackingManager->mInteracted_Object->mObject_attribute.color(1),
+				mTrackingManager->mInteracted_Object->mObject_attribute.color(2));
+			glBegin(GL_POINTS);
+			for (int i = 0; i < size; i++) {
+				glVertex3f(mTrackingManager->mInputManager->mImage_InputData.item.pointcloud.points[i].x,
+					mTrackingManager->mInputManager->mImage_InputData.item.pointcloud.points[i].y,
+					mTrackingManager->mInputManager->mImage_InputData.item.pointcloud.points[i].z);
 			}
+			glEnd();
 		}
-	}
-	void draw_Sphere()
-	{
-		glEnable(GL_LIGHT0);
-		glEnable(GL_LIGHTING);
-		GLfloat Sphere_ambient[] = { 1,1,0,1 };
-		GLfloat Sphere_specular[] = { 0.5, 0.5, 0.5, 1.0 };
-		GLfloat Sphere_shin[] = { 10 };
-		glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, Sphere_ambient);
-		glMaterialfv(GL_FRONT, GL_SPECULAR, Sphere_specular);
-		glMaterialfv(GL_FRONT, GL_SHININESS, Sphere_shin);
-
-		glPushMatrix();
-		glTranslatef(mInputManager->mImage_InputData.item.center(0),
-			mInputManager->mImage_InputData.item.center(1),
-			mInputManager->mImage_InputData.item.center(2));
-		glutSolidSphere(25, 20, 20);
-		glPopMatrix();
 	}
 	void draw_HandPointCloudNormal()
 	{
 		glDisable(GL_LIGHT0);
 		glDisable(GL_LIGHTING);
-		if (mInputManager->mImage_InputData.hand.pointcloud.points.size() > 0)
+		int size = mTrackingManager->mInputManager->mImage_InputData.hand.pointcloud.points.size();
+		if (size > 0)
 		{
 			int scale = 20;
 			glColor3f(0.0f, 0.0f, 1.0f);
 			glLineWidth(2);
 			glBegin(GL_LINES);
-			for (int i = 0; i < mInputManager->mImage_InputData.hand.pointcloud.points.size(); i++) {
-				glVertex3f(mInputManager->mImage_InputData.hand.pointcloud.points[i].x,
-					mInputManager->mImage_InputData.hand.pointcloud.points[i].y,
-					mInputManager->mImage_InputData.hand.pointcloud.points[i].z);
-				glVertex3f(mInputManager->mImage_InputData.hand.pointcloud.points[i].x + scale * mInputManager->mImage_InputData.hand.pointcloud.points[i].normal_x,
-					mInputManager->mImage_InputData.hand.pointcloud.points[i].y + scale * mInputManager->mImage_InputData.hand.pointcloud.points[i].normal_y,
-					mInputManager->mImage_InputData.hand.pointcloud.points[i].z + scale * mInputManager->mImage_InputData.hand.pointcloud.points[i].normal_z);
+			for (int i = 0; i < size; i++) {
+				glVertex3f(mTrackingManager->mInputManager->mImage_InputData.hand.pointcloud.points[i].x,
+					mTrackingManager->mInputManager->mImage_InputData.hand.pointcloud.points[i].y,
+					mTrackingManager->mInputManager->mImage_InputData.hand.pointcloud.points[i].z);
+				glVertex3f(mTrackingManager->mInputManager->mImage_InputData.hand.pointcloud.points[i].x + scale * mTrackingManager->mInputManager->mImage_InputData.hand.pointcloud.points[i].normal_x,
+					mTrackingManager->mInputManager->mImage_InputData.hand.pointcloud.points[i].y + scale * mTrackingManager->mInputManager->mImage_InputData.hand.pointcloud.points[i].normal_y,
+					mTrackingManager->mInputManager->mImage_InputData.hand.pointcloud.points[i].z + scale * mTrackingManager->mInputManager->mImage_InputData.hand.pointcloud.points[i].normal_z);
 			}
 			glEnd();
 		}
@@ -161,19 +149,20 @@ namespace DS
 	{
 		glDisable(GL_LIGHT0);
 		glDisable(GL_LIGHTING);
-		if (mInputManager->mImage_InputData.item.pointcloud.points.size() > 0)
+		int size = mTrackingManager->mInputManager->mImage_InputData.item.pointcloud.points.size();
+		if (size > 0)
 		{
 			int scale = 20;
 			glColor3f(0.0f, 0.0f, 1.0f);
 			glLineWidth(2);
 			glBegin(GL_LINES);
-			for (int i = 0; i < mInputManager->mImage_InputData.item.pointcloud.points.size(); i++) {
-				glVertex3f(mInputManager->mImage_InputData.item.pointcloud.points[i].x,
-					mInputManager->mImage_InputData.item.pointcloud.points[i].y,
-					mInputManager->mImage_InputData.item.pointcloud.points[i].z);
-				glVertex3f(mInputManager->mImage_InputData.item.pointcloud.points[i].x + scale * mInputManager->mImage_InputData.item.pointcloud.points[i].normal_x,
-					mInputManager->mImage_InputData.item.pointcloud.points[i].y + scale * mInputManager->mImage_InputData.item.pointcloud.points[i].normal_y,
-					mInputManager->mImage_InputData.item.pointcloud.points[i].z + scale * mInputManager->mImage_InputData.item.pointcloud.points[i].normal_z);
+			for (int i = 0; i < size; i++) {
+				glVertex3f(mTrackingManager->mInputManager->mImage_InputData.item.pointcloud.points[i].x,
+					mTrackingManager->mInputManager->mImage_InputData.item.pointcloud.points[i].y,
+					mTrackingManager->mInputManager->mImage_InputData.item.pointcloud.points[i].z);
+				glVertex3f(mTrackingManager->mInputManager->mImage_InputData.item.pointcloud.points[i].x + scale * mTrackingManager->mInputManager->mImage_InputData.item.pointcloud.points[i].normal_x,
+					mTrackingManager->mInputManager->mImage_InputData.item.pointcloud.points[i].y + scale * mTrackingManager->mInputManager->mImage_InputData.item.pointcloud.points[i].normal_y,
+					mTrackingManager->mInputManager->mImage_InputData.item.pointcloud.points[i].z + scale * mTrackingManager->mInputManager->mImage_InputData.item.pointcloud.points[i].normal_z);
 			}
 			glEnd();
 		}
@@ -230,6 +219,79 @@ namespace DS
 		glVertex3f(90, -50, 450 + 100);
 		glEnd();
 	}
+
+	void draw_Interacted_Object()
+	{
+		glEnable(GL_LIGHT0);
+		glEnable(GL_LIGHTING);
+
+		GLfloat Sphere_ambient[] = { mTrackingManager->mInteracted_Object->mObject_attribute.color(0),
+			mTrackingManager->mInteracted_Object->mObject_attribute.color(1),
+			mTrackingManager->mInteracted_Object->mObject_attribute.color(2),1 };
+		GLfloat Sphere_specular[] = { 0.5, 0.5, 0.5, 1.0 };
+		GLfloat Sphere_shin[] = { 10 };
+		glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, Sphere_ambient);
+		glMaterialfv(GL_FRONT, GL_SPECULAR, Sphere_specular);
+		glMaterialfv(GL_FRONT, GL_SHININESS, Sphere_shin);
+
+		if (!mTrackingManager->mInteracted_Object->Final_Vertices.empty())
+		{
+			int face_size = mTrackingManager->mInteracted_Object->Face_idx.size();
+			glBegin(GL_TRIANGLES);
+			for (size_t i = 0; i < face_size; ++i)
+			{
+				int idx_1 = mTrackingManager->mInteracted_Object->Face_idx[i](0);
+				int idx_2 = mTrackingManager->mInteracted_Object->Face_idx[i](1);
+				int idx_3 = mTrackingManager->mInteracted_Object->Face_idx[i](2);
+
+				glNormal3f(mTrackingManager->mInteracted_Object->Final_Normal[idx_1](0),
+					mTrackingManager->mInteracted_Object->Final_Normal[idx_1](1),
+					mTrackingManager->mInteracted_Object->Final_Normal[idx_1](2));
+				glVertex3f(mTrackingManager->mInteracted_Object->Final_Vertices[idx_1](0),
+					mTrackingManager->mInteracted_Object->Final_Vertices[idx_1](1),
+					mTrackingManager->mInteracted_Object->Final_Vertices[idx_1](2));
+
+				glNormal3f(mTrackingManager->mInteracted_Object->Final_Normal[idx_2](0),
+					mTrackingManager->mInteracted_Object->Final_Normal[idx_2](1),
+					mTrackingManager->mInteracted_Object->Final_Normal[idx_2](2));
+				glVertex3f(mTrackingManager->mInteracted_Object->Final_Vertices[idx_2](0),
+					mTrackingManager->mInteracted_Object->Final_Vertices[idx_2](1),
+					mTrackingManager->mInteracted_Object->Final_Vertices[idx_2](2));
+
+				glNormal3f(mTrackingManager->mInteracted_Object->Final_Normal[idx_3](0),
+					mTrackingManager->mInteracted_Object->Final_Normal[idx_3](1),
+					mTrackingManager->mInteracted_Object->Final_Normal[idx_3](2));
+				glVertex3f(mTrackingManager->mInteracted_Object->Final_Vertices[idx_3](0),
+					mTrackingManager->mInteracted_Object->Final_Vertices[idx_3](1),
+					mTrackingManager->mInteracted_Object->Final_Vertices[idx_3](2));
+			}
+			glEnd();
+		}
+	}
+	void draw_Interacted_Object_visible()
+	{
+		glDisable(GL_LIGHT0);
+		glDisable(GL_LIGHTING);
+		if (!mTrackingManager->mInteracted_Object->Final_Vertices.empty())
+		{
+			glPointSize(5);
+			glColor3f(mTrackingManager->mInteracted_Object->mObject_attribute.color(0),
+				mTrackingManager->mInteracted_Object->mObject_attribute.color(1),
+				mTrackingManager->mInteracted_Object->mObject_attribute.color(2));
+			int v_size = mTrackingManager->mInteracted_Object->Final_Vertices.size();
+			glBegin(GL_POINTS);
+			for (int i = 0; i < v_size; i++) {
+				if (mTrackingManager->mInteracted_Object->Final_Normal[i].z() < 0)
+				{
+					glVertex3f(mTrackingManager->mInteracted_Object->Final_Vertices[i].x(),
+						mTrackingManager->mInteracted_Object->Final_Vertices[i].y(),
+						mTrackingManager->mInteracted_Object->Final_Vertices[i].z());
+				}
+			}
+			glEnd();
+		}
+		
+	}
 #pragma endregion SetOfDraw
 	void draw() {
 
@@ -239,31 +301,32 @@ namespace DS
 		glMatrixMode(GL_MODELVIEW);
 		gluPerspective(180, 1.5, -1000, 1000);
 		glLoadIdentity();
-		control.gx = mInputManager->mImage_InputData.hand.center(0);
-		control.gy = mInputManager->mImage_InputData.hand.center(1);
-		control.gz = mInputManager->mImage_InputData.hand.center(2);
+		control.gx = mTrackingManager->mInputManager->mImage_InputData.item.center(0);
+		control.gy = mTrackingManager->mInputManager->mImage_InputData.item.center(1);
+		control.gz = mTrackingManager->mInputManager->mImage_InputData.item.center(2);
 
 		//这个值是根据palm_Center设置的，因为如果使用palm_Center的话，跳动会变得非常明显
-		if (mInputManager->getRuntimeType() == REALTIME)
+		if (mTrackingManager->mRuntimeType == REALTIME)
 		{
 			control.gx = 90;
-			control.gy = -30;
+			control.gy = -15;
 			control.gz = 450;
 		}
 
-		double r = 250;
+		double r =250;
 		double x = r*cos(control.roty)*sin(control.rotx);
 		double y = r*sin(control.roty);
 		double z = r*cos(control.roty)*cos(control.rotx);
 		//cout<< x <<" "<< y <<" " << z<<endl;
 		gluLookAt(x + control.gx, y + control.gy, z + control.gz, control.gx, control.gy, control.gz, 0.0, 1.0, 0.0);//个人理解最开始是看向-z的，之后的角度是在global中心上叠加的，所以要加
 
-		//draw_HandPointCloud();
+		draw_Interacted_Object();
+		//draw_Interacted_Object_visible();
+		draw_HandPointCloud();
 		//draw_HandPointCloudNormal();
-		//draw_ObjectCloud();
+		draw_ObjectCloud();
 		//draw_ObjectCloudNormal();
 		//draw_Coordinate();
-		//draw_Sphere();
 
 		glFlush();
 		glutSwapBuffers();
@@ -271,11 +334,8 @@ namespace DS
 
 	void idle() {
 
-		if (mInputManager->fetchInputData())
-		{
-			mInputManager->ShowImage_input(true, true, true);
-		}
-
+		mTrackingManager->Tracking(track);
+		mTrackingManager->ShowRenderAddColor();
 		glutPostRedisplay();
 	}
 

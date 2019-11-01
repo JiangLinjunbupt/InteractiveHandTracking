@@ -81,11 +81,14 @@ auto soil = Soil<float, float, unsigned int, Result_Types::probabilities>();
 auto forest = soil.ForestFromFile("E:\\githubProject\\hand-seg-rdf\\examples\\c++\\ff_handsegmentation.ff");
 
 
-RealSenseSensor::RealSenseSensor(Camera* _camera, int maxPixelNUM)
+RealSenseSensor::RealSenseSensor(Camera* _camera, int maxPixelNUM, Object_type object_type)
 {
 	camera = _camera;
 	initialized = false;
 	MaxPixelNUM = maxPixelNUM;
+	mObject_type = object_type;
+
+	distance_transform.init(_camera->width(), _camera->height());
 }
 
 RealSenseSensor::~RealSenseSensor()
@@ -238,6 +241,11 @@ bool RealSenseSensor::run()
 						//点云转换
 						DepthToPointCloud(m_Image_InputData[BACK_BUFFER]);
 
+						distance_transform.exec(m_Image_InputData[BACK_BUFFER].silhouette.data, 125);
+						std::copy(distance_transform.idxs_image_ptr(), 
+							distance_transform.idxs_image_ptr() + m_Image_InputData[BACK_BUFFER].silhouette.cols * m_Image_InputData[BACK_BUFFER].silhouette.rows, 
+							m_Image_InputData[BACK_BUFFER].idxs_image);
+
 						//交换数据
 						{
 							std::unique_lock<std::mutex> lock(swap_mutex_realsense);
@@ -382,9 +390,26 @@ bool RealSenseSensor::GetColorAndDepthImage(cv::Mat& depthImg, cv::Mat& colorImg
 
 bool RealSenseSensor::SegObject(cv::Mat& depth, cv::Mat& hsv, cv::Mat& objectMask)
 {
+	int object_hmin, object_hmax;
+	int object_smin, object_smax;
+	int object_vmin, object_vmax;
+
 	//黄色的小球的阈值
-	int object_hmin = 40, object_smin = 120, object_vmin = 0;
-	int object_hmax = 100, object_smax = 255, object_vmax = 255;
+	switch (mObject_type)
+	{
+	case yellowSphere:
+		object_hmin = 40; object_smin = 110; object_vmin = 0;
+		object_hmax = 100; object_smax = 255; object_vmax = 255;
+		break;
+	case redCube:
+		object_hmin = 300; object_smin = 110; object_vmin = 80;
+		object_hmax = 360; object_smax = 255; object_vmax = 255;
+		break;
+	default:
+		object_hmin = 0; object_smin = 0; object_vmin = 0;
+		object_hmax = 360; object_smax = 255; object_vmax = 255;
+		break;
+	}
 
 	int s_Max = 255;
 	int v_Max = 255;

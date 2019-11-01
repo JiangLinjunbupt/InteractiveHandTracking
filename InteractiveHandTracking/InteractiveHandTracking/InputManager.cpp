@@ -1,15 +1,14 @@
 #include"InputManager.h"
 
-InputManager::InputManager(RuntimeType type, float* sharedMemeryPtr, int maxPixelNUM)
+InputManager::InputManager(RuntimeType type, float* sharedMemeryPtr, int maxPixelNUM, Object_type object_type)
 {
 	mRuntimeType = type;
 	mCamera = new Camera(type);
-	mRealSenseSR300 = new RealSenseSensor(mCamera, maxPixelNUM);
+	mRealSenseSR300 = new RealSenseSensor(mCamera, maxPixelNUM, object_type);
 
 	mImage_InputData.Init(mCamera->width(), mCamera->height());
 	if (mRuntimeType == REALTIME) mRealSenseSR300->start();
 }
-
 
 bool InputManager::fetchInputData()
 {

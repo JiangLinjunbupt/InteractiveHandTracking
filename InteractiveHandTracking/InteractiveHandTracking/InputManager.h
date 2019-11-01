@@ -11,7 +11,7 @@ private:
 	RealSenseSensor* mRealSenseSR300 = nullptr;
 	RuntimeType mRuntimeType;
 public:
-	InputManager(RuntimeType type, float* sharedMemeryPtr = nullptr, int maxPixelNUM = 192);
+	InputManager(RuntimeType type, float* sharedMemeryPtr = nullptr, int maxPixelNUM = 192, Object_type object_type = yellowSphere);
 	bool fetchInputData();
 	RuntimeType getRuntimeType() {
 		return mRuntimeType;

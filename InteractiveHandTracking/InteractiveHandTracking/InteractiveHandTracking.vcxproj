@@ -95,17 +95,25 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="Camera.h" />
+    <ClInclude Include="DistanceTransform.h" />
     <ClInclude Include="InputManager.h" />
     <ClInclude Include="Interacted_Object.h" />
     <ClInclude Include="OpenGL_Display.h" />
     <ClInclude Include="RealSenseSR300.h" />
+    <ClInclude Include="SolverManager.h" />
+    <ClInclude Include="TrackingManager.h" />
     <ClInclude Include="Types.h" />
+    <ClInclude Include="Worker.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Camera.cpp" />
     <ClCompile Include="InputManager.cpp" />
     <ClCompile Include="OpenGL_Display.cpp" />
     <ClCompile Include="RealSenseSR300.cpp" />
+    <ClCompile Include="RedCube.cpp" />
+    <ClCompile Include="SolverManager.cpp" />
+    <ClCompile Include="TrackingManager.cpp" />
+    <ClCompile Include="Worker.cpp" />
     <ClCompile Include="YellowSpere.cpp" />
     <ClCompile Include="源.cpp" />
   </ItemGroup>

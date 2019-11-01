@@ -9,22 +9,24 @@
 #include "pxchanddata.h"
 #include "pxcsession.h"
 #include "pxcprojection.h"
-
+#include "DistanceTransform.h"
 class RealSenseSensor
 {
-public:
+private:
 	const int BACK_BUFFER = 1;
 	const int FRONT_BUFFER = 0;
 
 	Image_InputData m_Image_InputData[2];
-protected:
+
 	bool initialized;
 	Camera* camera;
 	int currentFrame_idx = 0;
 	int MaxPixelNUM = 192;
+	Object_type mObject_type;
+	DistanceTransform distance_transform;
 
 public:
-	RealSenseSensor(Camera* _camera, int maxPixelNUM = 192);
+	RealSenseSensor(Camera* _camera, int maxPixelNUM = 192, Object_type object_type= yellowSphere);
 	~RealSenseSensor();
 	bool concurrent_fetch_streams(Image_InputData& inputdata);
 	bool start();
