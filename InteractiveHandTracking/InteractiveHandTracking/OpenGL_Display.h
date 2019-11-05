@@ -11,7 +11,6 @@ using namespace std::chrono;
 namespace DS {
 	extern TrackingManager* mTrackingManager;
 
-	extern Eigen::VectorXf previous_params;
 	extern bool show_handmodel;
 	extern bool pause;
 	extern bool track;
@@ -37,6 +36,7 @@ namespace DS {
 	void draw_Coordinate();
 
 	void draw_Interacted_Object();
+	void draw_HandModel();
 	void draw();
 
 	//OpenGL¿ØÖÆº¯Êý

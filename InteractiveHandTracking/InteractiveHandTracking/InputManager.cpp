@@ -5,8 +5,9 @@ InputManager::InputManager(RuntimeType type, float* sharedMemeryPtr, int maxPixe
 	mRuntimeType = type;
 	mCamera = new Camera(type);
 	mRealSenseSR300 = new RealSenseSensor(mCamera, maxPixelNUM, object_type);
+	mGlove = new Glove(sharedMemeryPtr);
 
-	mImage_InputData.Init(mCamera->width(), mCamera->height());
+	mInputData.Init(mCamera->width(), mCamera->height());
 	if (mRuntimeType == REALTIME) mRealSenseSR300->start();
 }
 
@@ -17,12 +18,13 @@ bool InputManager::fetchInputData()
 	switch (mRuntimeType)
 	{
 	case REALTIME:
-		fetchResult = mRealSenseSR300->concurrent_fetch_streams(mImage_InputData);
+		fetchResult = mRealSenseSR300->concurrent_fetch_streams(mInputData.image_data);
+		mGlove->fetch_RealTime_Data(mInputData);
 		break;
 	default:
 		break;
 	}
-
+	ShowImage_input(true, true, false);
 	return fetchResult;
 }
 
@@ -31,21 +33,21 @@ void InputManager::ShowImage_input(bool show_obj, bool show_hand, bool show_colo
 	if (show_obj)
 	{
 		cv::Mat objectMask;
-		cv::flip(mImage_InputData.item.silhouette, objectMask, 0);
+		cv::flip(mInputData.image_data.item.silhouette, objectMask, 0);
 		cv::imshow("物体分割", objectMask);
 	}
 	
 	if (show_hand)
 	{
 		cv::Mat handMask;
-		cv::flip(mImage_InputData.hand.silhouette, handMask, 0);
+		cv::flip(mInputData.image_data.hand.silhouette, handMask, 0);
 		cv::imshow("人手分割", handMask);
 	}
 
 	if (show_color)
 	{
 		cv::Mat color;
-		cv::flip(mImage_InputData.color, color, 0);
+		cv::flip(mInputData.image_data.color, color, 0);
 		cv::imshow("彩色图", color);
 	}
 

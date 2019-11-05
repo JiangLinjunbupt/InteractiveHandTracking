@@ -7,6 +7,7 @@ struct GlobalSetting
 	RuntimeType type;
 	int start_points;
 	int maxPixelNUM;
+	float* sharedMeneryPtr = NULL;
 
 	Object_type object_type;
 };
@@ -17,6 +18,7 @@ public:
 	InputManager* mInputManager;
 	SolverManager* mSolverManager;
 	Interacted_Object* mInteracted_Object;
+	HandModel* mHandModel;
 	Camera* mCamera;
 
 	Eigen::VectorXf mPreviousOptimizedParams;
@@ -24,6 +26,7 @@ public:
 
 private:
 	bool is_success = false;
+	Rendered_Images mRendered_Images;
 public:
 	TrackingManager(const GlobalSetting& setting);
 	void Tracking(bool do_tracking);

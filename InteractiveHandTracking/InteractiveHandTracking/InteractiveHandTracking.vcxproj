@@ -96,8 +96,11 @@
   <ItemGroup>
     <ClInclude Include="Camera.h" />
     <ClInclude Include="DistanceTransform.h" />
+    <ClInclude Include="Glove.h" />
+    <ClInclude Include="HandModel.h" />
     <ClInclude Include="InputManager.h" />
     <ClInclude Include="Interacted_Object.h" />
+    <ClInclude Include="Kalman.h" />
     <ClInclude Include="OpenGL_Display.h" />
     <ClInclude Include="RealSenseSR300.h" />
     <ClInclude Include="SolverManager.h" />
@@ -107,7 +110,10 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Camera.cpp" />
+    <ClCompile Include="Glove.cpp" />
+    <ClCompile Include="HandModel.cpp" />
     <ClCompile Include="InputManager.cpp" />
+    <ClCompile Include="Kalman.cpp" />
     <ClCompile Include="OpenGL_Display.cpp" />
     <ClCompile Include="RealSenseSR300.cpp" />
     <ClCompile Include="RedCube.cpp" />

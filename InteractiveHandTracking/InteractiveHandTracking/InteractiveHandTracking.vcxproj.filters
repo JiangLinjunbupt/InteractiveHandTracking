@@ -45,6 +45,15 @@
     <ClInclude Include="DistanceTransform.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="HandModel.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="Glove.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="Kalman.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Camera.cpp">
@@ -75,6 +84,15 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="RedCube.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="HandModel.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="Glove.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="Kalman.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

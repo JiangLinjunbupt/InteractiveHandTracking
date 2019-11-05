@@ -5,7 +5,6 @@ namespace DS
 {
 	TrackingManager* mTrackingManager;
 
-	Eigen::VectorXf previous_params;
 	bool show_handmodel = true;
 	bool pause = false;
 	bool track = false;
@@ -89,15 +88,15 @@ namespace DS
 	{
 		glDisable(GL_LIGHT0);
 		glDisable(GL_LIGHTING);
-		int size = mTrackingManager->mInputManager->mImage_InputData.hand.pointcloud.points.size();
+		int size = mTrackingManager->mInputManager->mInputData.image_data.hand.pointcloud.points.size();
 		if (size > 0)
 		{
 			glColor3f(0.0f, 1.0f, 0.0f);
 			for (int i = 0; i < size; i++) {
 				glPushMatrix();
-				glTranslatef(mTrackingManager->mInputManager->mImage_InputData.hand.pointcloud.points[i].x,
-					mTrackingManager->mInputManager->mImage_InputData.hand.pointcloud.points[i].y,
-					mTrackingManager->mInputManager->mImage_InputData.hand.pointcloud.points[i].z);
+				glTranslatef(mTrackingManager->mInputManager->mInputData.image_data.hand.pointcloud.points[i].x,
+					mTrackingManager->mInputManager->mInputData.image_data.hand.pointcloud.points[i].y,
+					mTrackingManager->mInputManager->mInputData.image_data.hand.pointcloud.points[i].z);
 				glutSolidSphere(2, 10, 10);
 				glPopMatrix();
 			}
@@ -107,7 +106,7 @@ namespace DS
 	{
 		glDisable(GL_LIGHT0);
 		glDisable(GL_LIGHTING);
-		int size = mTrackingManager->mInputManager->mImage_InputData.item.pointcloud.points.size();
+		int size = mTrackingManager->mInputManager->mInputData.image_data.item.pointcloud.points.size();
 		if (size > 0)
 		{
 			glPointSize(5);
@@ -116,9 +115,9 @@ namespace DS
 				mTrackingManager->mInteracted_Object->mObject_attribute.color(2));
 			glBegin(GL_POINTS);
 			for (int i = 0; i < size; i++) {
-				glVertex3f(mTrackingManager->mInputManager->mImage_InputData.item.pointcloud.points[i].x,
-					mTrackingManager->mInputManager->mImage_InputData.item.pointcloud.points[i].y,
-					mTrackingManager->mInputManager->mImage_InputData.item.pointcloud.points[i].z);
+				glVertex3f(mTrackingManager->mInputManager->mInputData.image_data.item.pointcloud.points[i].x,
+					mTrackingManager->mInputManager->mInputData.image_data.item.pointcloud.points[i].y,
+					mTrackingManager->mInputManager->mInputData.image_data.item.pointcloud.points[i].z);
 			}
 			glEnd();
 		}
@@ -127,7 +126,7 @@ namespace DS
 	{
 		glDisable(GL_LIGHT0);
 		glDisable(GL_LIGHTING);
-		int size = mTrackingManager->mInputManager->mImage_InputData.hand.pointcloud.points.size();
+		int size = mTrackingManager->mInputManager->mInputData.image_data.hand.pointcloud.points.size();
 		if (size > 0)
 		{
 			int scale = 20;
@@ -135,12 +134,12 @@ namespace DS
 			glLineWidth(2);
 			glBegin(GL_LINES);
 			for (int i = 0; i < size; i++) {
-				glVertex3f(mTrackingManager->mInputManager->mImage_InputData.hand.pointcloud.points[i].x,
-					mTrackingManager->mInputManager->mImage_InputData.hand.pointcloud.points[i].y,
-					mTrackingManager->mInputManager->mImage_InputData.hand.pointcloud.points[i].z);
-				glVertex3f(mTrackingManager->mInputManager->mImage_InputData.hand.pointcloud.points[i].x + scale * mTrackingManager->mInputManager->mImage_InputData.hand.pointcloud.points[i].normal_x,
-					mTrackingManager->mInputManager->mImage_InputData.hand.pointcloud.points[i].y + scale * mTrackingManager->mInputManager->mImage_InputData.hand.pointcloud.points[i].normal_y,
-					mTrackingManager->mInputManager->mImage_InputData.hand.pointcloud.points[i].z + scale * mTrackingManager->mInputManager->mImage_InputData.hand.pointcloud.points[i].normal_z);
+				glVertex3f(mTrackingManager->mInputManager->mInputData.image_data.hand.pointcloud.points[i].x,
+					mTrackingManager->mInputManager->mInputData.image_data.hand.pointcloud.points[i].y,
+					mTrackingManager->mInputManager->mInputData.image_data.hand.pointcloud.points[i].z);
+				glVertex3f(mTrackingManager->mInputManager->mInputData.image_data.hand.pointcloud.points[i].x + scale * mTrackingManager->mInputManager->mInputData.image_data.hand.pointcloud.points[i].normal_x,
+					mTrackingManager->mInputManager->mInputData.image_data.hand.pointcloud.points[i].y + scale * mTrackingManager->mInputManager->mInputData.image_data.hand.pointcloud.points[i].normal_y,
+					mTrackingManager->mInputManager->mInputData.image_data.hand.pointcloud.points[i].z + scale * mTrackingManager->mInputManager->mInputData.image_data.hand.pointcloud.points[i].normal_z);
 			}
 			glEnd();
 		}
@@ -149,7 +148,7 @@ namespace DS
 	{
 		glDisable(GL_LIGHT0);
 		glDisable(GL_LIGHTING);
-		int size = mTrackingManager->mInputManager->mImage_InputData.item.pointcloud.points.size();
+		int size = mTrackingManager->mInputManager->mInputData.image_data.item.pointcloud.points.size();
 		if (size > 0)
 		{
 			int scale = 20;
@@ -157,12 +156,12 @@ namespace DS
 			glLineWidth(2);
 			glBegin(GL_LINES);
 			for (int i = 0; i < size; i++) {
-				glVertex3f(mTrackingManager->mInputManager->mImage_InputData.item.pointcloud.points[i].x,
-					mTrackingManager->mInputManager->mImage_InputData.item.pointcloud.points[i].y,
-					mTrackingManager->mInputManager->mImage_InputData.item.pointcloud.points[i].z);
-				glVertex3f(mTrackingManager->mInputManager->mImage_InputData.item.pointcloud.points[i].x + scale * mTrackingManager->mInputManager->mImage_InputData.item.pointcloud.points[i].normal_x,
-					mTrackingManager->mInputManager->mImage_InputData.item.pointcloud.points[i].y + scale * mTrackingManager->mInputManager->mImage_InputData.item.pointcloud.points[i].normal_y,
-					mTrackingManager->mInputManager->mImage_InputData.item.pointcloud.points[i].z + scale * mTrackingManager->mInputManager->mImage_InputData.item.pointcloud.points[i].normal_z);
+				glVertex3f(mTrackingManager->mInputManager->mInputData.image_data.item.pointcloud.points[i].x,
+					mTrackingManager->mInputManager->mInputData.image_data.item.pointcloud.points[i].y,
+					mTrackingManager->mInputManager->mInputData.image_data.item.pointcloud.points[i].z);
+				glVertex3f(mTrackingManager->mInputManager->mInputData.image_data.item.pointcloud.points[i].x + scale * mTrackingManager->mInputManager->mInputData.image_data.item.pointcloud.points[i].normal_x,
+					mTrackingManager->mInputManager->mInputData.image_data.item.pointcloud.points[i].y + scale * mTrackingManager->mInputManager->mInputData.image_data.item.pointcloud.points[i].normal_y,
+					mTrackingManager->mInputManager->mInputData.image_data.item.pointcloud.points[i].z + scale * mTrackingManager->mInputManager->mInputData.image_data.item.pointcloud.points[i].normal_z);
 			}
 			glEnd();
 		}
@@ -268,29 +267,44 @@ namespace DS
 			glEnd();
 		}
 	}
-	void draw_Interacted_Object_visible()
+	void draw_HandModel()
 	{
-		glDisable(GL_LIGHT0);
-		glDisable(GL_LIGHTING);
-		if (!mTrackingManager->mInteracted_Object->Final_Vertices.empty())
+		glEnable(GL_LIGHTING);
+		glEnable(GL_LIGHT0);
 		{
-			glPointSize(5);
-			glColor3f(mTrackingManager->mInteracted_Object->mObject_attribute.color(0),
-				mTrackingManager->mInteracted_Object->mObject_attribute.color(1),
-				mTrackingManager->mInteracted_Object->mObject_attribute.color(2));
-			int v_size = mTrackingManager->mInteracted_Object->Final_Vertices.size();
-			glBegin(GL_POINTS);
-			for (int i = 0; i < v_size; i++) {
-				if (mTrackingManager->mInteracted_Object->Final_Normal[i].z() < 0)
-				{
-					glVertex3f(mTrackingManager->mInteracted_Object->Final_Vertices[i].x(),
-						mTrackingManager->mInteracted_Object->Final_Vertices[i].y(),
-						mTrackingManager->mInteracted_Object->Final_Vertices[i].z());
-				}
+			glPushMatrix();
+
+			GLfloat mat_ambient[] = { 0.05, 0.0, 0.0, 1.0 };
+			GLfloat mat_diffuse[] = { 0.5, 0.4,0.4, 1.0 };
+			GLfloat mat_specular[] = { 0.7, 0.04, 0.04, 1.0 };
+			GLfloat no_shininess[] = { 0.78125 };
+
+			glMaterialfv(GL_FRONT, GL_AMBIENT, mat_ambient);
+			glMaterialfv(GL_FRONT, GL_DIFFUSE, mat_diffuse);
+			glMaterialfv(GL_FRONT, GL_SPECULAR, mat_specular);
+			glMaterialfv(GL_FRONT, GL_SHININESS, no_shininess);
+
+			glBegin(GL_TRIANGLES);
+			for (int i = 0; i < mTrackingManager->mHandModel->Face_num; ++i)
+			{
+
+				glNormal3f(mTrackingManager->mHandModel->F_normal(i, 0), mTrackingManager->mHandModel->F_normal(i, 1), mTrackingManager->mHandModel->F_normal(i, 2));
+
+				glVertex3f(mTrackingManager->mHandModel->V_Final(mTrackingManager->mHandModel->F(i, 0), 0),
+					mTrackingManager->mHandModel->V_Final(mTrackingManager->mHandModel->F(i, 0), 1),
+					mTrackingManager->mHandModel->V_Final(mTrackingManager->mHandModel->F(i, 0), 2));
+
+				glVertex3f(mTrackingManager->mHandModel->V_Final(mTrackingManager->mHandModel->F(i, 1), 0),
+					mTrackingManager->mHandModel->V_Final(mTrackingManager->mHandModel->F(i, 1), 1),
+					mTrackingManager->mHandModel->V_Final(mTrackingManager->mHandModel->F(i, 1), 2));
+
+				glVertex3f(mTrackingManager->mHandModel->V_Final(mTrackingManager->mHandModel->F(i, 2), 0),
+					mTrackingManager->mHandModel->V_Final(mTrackingManager->mHandModel->F(i, 2), 1),
+					mTrackingManager->mHandModel->V_Final(mTrackingManager->mHandModel->F(i, 2), 2));
 			}
 			glEnd();
+			glPopMatrix();            //弹出矩阵。
 		}
-		
 	}
 #pragma endregion SetOfDraw
 	void draw() {
@@ -301,9 +315,9 @@ namespace DS
 		glMatrixMode(GL_MODELVIEW);
 		gluPerspective(180, 1.5, -1000, 1000);
 		glLoadIdentity();
-		control.gx = mTrackingManager->mInputManager->mImage_InputData.item.center(0);
-		control.gy = mTrackingManager->mInputManager->mImage_InputData.item.center(1);
-		control.gz = mTrackingManager->mInputManager->mImage_InputData.item.center(2);
+		control.gx = mTrackingManager->mInputManager->mInputData.image_data.item.center(0);
+		control.gy = mTrackingManager->mInputManager->mInputData.image_data.item.center(1);
+		control.gz = mTrackingManager->mInputManager->mInputData.image_data.item.center(2);
 
 		//这个值是根据palm_Center设置的，因为如果使用palm_Center的话，跳动会变得非常明显
 		if (mTrackingManager->mRuntimeType == REALTIME)
@@ -320,13 +334,11 @@ namespace DS
 		//cout<< x <<" "<< y <<" " << z<<endl;
 		gluLookAt(x + control.gx, y + control.gy, z + control.gz, control.gx, control.gy, control.gz, 0.0, 1.0, 0.0);//个人理解最开始是看向-z的，之后的角度是在global中心上叠加的，所以要加
 
+		draw_HandModel();
 		draw_Interacted_Object();
-		//draw_Interacted_Object_visible();
 		draw_HandPointCloud();
-		//draw_HandPointCloudNormal();
 		draw_ObjectCloud();
-		//draw_ObjectCloudNormal();
-		//draw_Coordinate();
+		draw_Coordinate();
 
 		glFlush();
 		glutSwapBuffers();

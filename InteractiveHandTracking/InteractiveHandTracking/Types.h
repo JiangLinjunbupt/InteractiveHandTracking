@@ -24,6 +24,15 @@ using namespace std::chrono;
 #define RADIUS_TO_ANGLE 57.2974
 
 #define NUM_OBJECT_PARAMS 6
+#define NUM_HAND_FINGER_PARAMS 45
+#define NUM_HAND_POSE_PARAMS 51
+#define NUM_HAND_SHAPE_PARAMS 10
+
+#define NUM_HAND_GLOBAL_PARAMS 6
+#define NUM_HAND_WRIST_PARAMS 3
+#define NUM_HAND_POSITION_PARAMS 3
+
+
 
 typedef Eigen::Matrix4f Matrix4;
 typedef Eigen::Matrix<float, 3, 3> Matrix3;
@@ -66,6 +75,24 @@ enum Object_type { yellowSphere, redCube };
 enum RuntimeType
 {
 	REALTIME,Dataset_MSRA_14, Dataset_MSRA_15, Handy_teaser, ICVL, NYU, GeneratedData, Guess_who
+};
+
+enum FingerType
+{
+	Index, Middle, Pinky, Ring, Thumb
+};
+struct Collision
+{
+	int id;
+	bool root;
+
+	Eigen::Vector3f Init_Center;
+	Eigen::Vector3f Update_Center;
+
+	float Radius;
+	int joint_belong;
+	FingerType fingerType;
+
 };
 
 ///开始定义交互物体的输入信息结构体 和 人手输入信息结构体
@@ -155,5 +182,76 @@ struct Image_InputData
 		item = image_input.item;
 
 		std::copy(image_input.idxs_image, image_input.idxs_image + width * height, idxs_image);
+	}
+};
+
+struct Glove_InputData
+{
+	VectorN params;
+	VectorN shapeparams;
+
+	void Init()
+	{
+		params = VectorN::Zero(NUM_HAND_POSE_PARAMS);
+		shapeparams = VectorN::Zero(NUM_HAND_SHAPE_PARAMS);
+	}
+};
+
+struct InputData
+{
+	Image_InputData image_data;
+	Glove_InputData glove_data;
+
+	void Init(const int W, const int H)
+	{
+		image_data.Init(W, H);
+		glove_data.Init();
+	}
+};
+
+
+struct Rendered_Images
+{
+	cv::Mat total_silhouette;
+	cv::Mat total_depth;
+
+	cv::Mat rendered_object_silhouette;
+	cv::Mat rendered_object_depth;
+
+	cv::Mat rendered_hand_silhouette;
+	cv::Mat rendered_hand_depth;
+
+	void init(int w, int h)
+	{
+		total_silhouette = cv::Mat(cv::Size(w, h), CV_8UC1, cv::Scalar(0));
+		rendered_object_silhouette = cv::Mat(cv::Size(w, h), CV_8UC1, cv::Scalar(0));
+		rendered_hand_silhouette = cv::Mat(cv::Size(w, h), CV_8UC1, cv::Scalar(0));
+
+		total_depth = cv::Mat(cv::Size(w, h), CV_16UC1, cv::Scalar(0));
+		rendered_object_depth = cv::Mat(cv::Size(w, h), CV_16UC1, cv::Scalar(0));
+		rendered_hand_depth = cv::Mat(cv::Size(w, h), CV_16UC1, cv::Scalar(0));
+	}
+
+	void setToZero()
+	{
+		total_silhouette.setTo(0);
+		rendered_object_silhouette.setTo(0);
+		rendered_hand_silhouette.setTo(0);
+
+		total_depth.setTo(0);
+		rendered_object_depth.setTo(0);
+		rendered_hand_depth.setTo(0);
+	}
+
+	void operator=(Rendered_Images& rendered_images)
+	{
+		rendered_images.total_silhouette.copyTo(total_silhouette);
+		rendered_images.total_depth.copyTo(total_depth);
+
+		rendered_images.rendered_hand_silhouette.copyTo(rendered_hand_silhouette);
+		rendered_images.rendered_hand_depth.copyTo(rendered_hand_depth);
+
+		rendered_images.rendered_object_depth.copyTo(rendered_object_depth);
+		rendered_images.rendered_object_silhouette.copyTo(rendered_object_silhouette);
 	}
 };
