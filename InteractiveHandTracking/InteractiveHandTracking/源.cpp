@@ -20,7 +20,7 @@ void main(int argc, char** argv)
 	mGlobalSetting.start_points = 5;
 	mGlobalSetting.maxPixelNUM = 192;
 	mGlobalSetting.sharedMeneryPtr = GetSharedMemeryPtr;
-	mGlobalSetting.object_type = yellowSphere;
+	mGlobalSetting.object_type = redCube;
 
 
 	TrackingManager* mTrackingManager = new TrackingManager(mGlobalSetting);

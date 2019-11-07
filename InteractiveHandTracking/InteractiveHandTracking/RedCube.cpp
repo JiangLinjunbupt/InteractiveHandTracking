@@ -12,10 +12,10 @@ RedCube::RedCube(Camera* camera) :Interacted_Object(camera)
 		mObject_attribute.CornerPoints.row(2) = Eigen::RowVector3f(25.0f, 25.0f, -25.0f);
 		mObject_attribute.CornerPoints.row(3) = Eigen::RowVector3f(25.0f, 25.0f, 25.0f);
 
-		mObject_attribute.CornerPoints.row(0) = Eigen::RowVector3f(-25.0f, -25.0f, 25.0f);
-		mObject_attribute.CornerPoints.row(0) = Eigen::RowVector3f(-25.0f, -25.0f, -25.0f);
-		mObject_attribute.CornerPoints.row(0) = Eigen::RowVector3f(25.0f, -25.0f, -25.0f);
-		mObject_attribute.CornerPoints.row(0) = Eigen::RowVector3f(25.0f, -25.0f, 25.0f);
+		mObject_attribute.CornerPoints.row(4) = Eigen::RowVector3f(-25.0f, -25.0f, 25.0f);
+		mObject_attribute.CornerPoints.row(5) = Eigen::RowVector3f(-25.0f, -25.0f, -25.0f);
+		mObject_attribute.CornerPoints.row(6) = Eigen::RowVector3f(25.0f, -25.0f, -25.0f);
+		mObject_attribute.CornerPoints.row(7) = Eigen::RowVector3f(25.0f, -25.0f, 25.0f);
 	}
 	this->GenerateOrLoadPointsAndNormal();  //加载最初的点线面和法线
 
@@ -241,7 +241,6 @@ void RedCube::GenerateOrLoadPointsAndNormal()
 	cout << "顶点数量为：" << init_Vertices.size() << endl;
 }
 
-
 void RedCube::GenerateDepthAndSilhouette()
 {
 	Vector3 center = object_params.head(3);
@@ -399,4 +398,74 @@ void RedCube::UpdateVerticesAndNormal()
 			Visible_2D.emplace_back(make_pair(Vector3(p_2D(0), p_2D(1), Final_Vertices[i](2)),i));
 		}
 	}
+
+	//更新角点以及局部坐标系
+	for (int i = 0; i < 8; ++i)
+	{
+		Eigen::Vector4f tmp(mObject_attribute.CornerPoints(i, 0), mObject_attribute.CornerPoints(i, 1), mObject_attribute.CornerPoints(i, 2), 1);
+		FinalCornerPoints.row(i) = ((updataMatrix * tmp).head(3)).transpose();
+	}
+
+	Eigen::Vector4f X_tmp(1, 0, 0, 0);
+	Eigen::Vector4f Y_tmp(0, 1, 0, 0);
+	Eigen::Vector4f Z_tmp(0, 0, 1, 0);
+
+	Coordinate.col(0) = (updataMatrix * X_tmp).head(3);
+	Coordinate.col(1) = (updataMatrix * Y_tmp).head(3);
+	Coordinate.col(2) = (updataMatrix * Z_tmp).head(3);
+}
+
+
+bool RedCube::Is_inside(const Eigen::VectorXf& p)
+{
+	float Half_Len = mObject_attribute.length / 2.0f;
+
+	Vector3 C = Vector3(object_params(0), object_params(1), object_params(2));
+	Vector3 CP = p - C;
+
+	//计算投影
+	float L_OX = CP.dot(Coordinate.col(0));
+	float L_OY = CP.dot(Coordinate.col(1));
+	float L_OZ = CP.dot(Coordinate.col(2));
+
+	return (abs(L_OX) < Half_Len) && (abs(L_OY) < Half_Len) && (abs(L_OZ) < Half_Len);
+}
+
+Eigen::VectorXf RedCube::FindTarget(const Eigen::VectorXf& p)
+{
+	float Half_Len = mObject_attribute.length / 2.0f;
+
+	Vector3 C = Vector3(object_params(0), object_params(1), object_params(2));
+	Vector3 CP = p - C;
+
+	//计算投影
+	float L_OX = CP.dot(Coordinate.col(0));
+	float L_OY = CP.dot(Coordinate.col(1));
+	float L_OZ = CP.dot(Coordinate.col(2));
+
+	Vector3 target;
+	//找到最大的投影，因为投影越大，说明距离中心越远，距离表面就越近
+	if (abs(L_OX) > abs(L_OY) && abs(L_OX) > abs(L_OZ))
+	{
+		Vector3 dir = L_OX / abs(L_OX) * Coordinate.col(0);
+		float scale = Half_Len - abs(L_OX);
+
+		target =  p + scale * dir;
+	}
+	else if (abs(L_OY) > abs(L_OX) && abs(L_OY) > abs(L_OZ))
+	{
+		Vector3 dir = L_OY / abs(L_OY) * Coordinate.col(1);
+		float scale = Half_Len - abs(L_OY);
+
+		target = p + scale * dir;
+	}
+	else
+	{
+		Vector3 dir = L_OZ / abs(L_OZ) * Coordinate.col(2);
+		float scale = Half_Len - abs(L_OZ);
+
+		target = p + scale * dir;
+	}
+
+	return target;
 }

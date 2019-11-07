@@ -75,6 +75,8 @@ public:
 		jacobain.col(4) = (y_jacob * tmp).head(3);
 		jacobain.col(5) = (z_jacob * tmp).head(3);
 	}
+	virtual bool Is_inside(const Eigen::VectorXf& p) = 0;
+	virtual Eigen::VectorXf FindTarget(const Eigen::VectorXf& p) = 0;
 protected:
 	Eigen::Matrix3f EularToRotateMatrix(float x, float y, float z)
 	{
@@ -151,11 +153,16 @@ public:
 	void GenerateDepthAndSilhouette();
 	void ShowDepth();
 	void Update(const Eigen::VectorXf& params);
+	bool Is_inside(const Eigen::VectorXf& p);
+	Eigen::VectorXf FindTarget(const Eigen::VectorXf& p);
 };
 
 
 class RedCube :public Interacted_Object
 {
+private:
+	Eigen::Matrix<float, 8, 3> FinalCornerPoints;
+	Eigen::Matrix<float, 3, 3> Coordinate;
 protected:
 	void GenerateOrLoadPointsAndNormal();
 	void UpdateVerticesAndNormal();
@@ -166,4 +173,6 @@ public:
 	void GenerateDepthAndSilhouette();
 	void ShowDepth();
 	void Update(const Eigen::VectorXf& params);
+	bool Is_inside(const Eigen::VectorXf& p);
+	Eigen::VectorXf FindTarget(const Eigen::VectorXf& p);
 };

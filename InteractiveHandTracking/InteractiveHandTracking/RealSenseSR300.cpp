@@ -382,8 +382,8 @@ bool RealSenseSensor::GetColorAndDepthImage(cv::Mat& depthImg, cv::Mat& colorImg
 		//这里要记得释放资源
 		sync_color_pxc->ReleaseAccess(&color_buffer);
 		depth->ReleaseAccess(&depth_buffer);
+		sync_color_pxc->Release();
 	}
-	sync_color_pxc->Release();
 
 	return is_getColorAndDepth;
 }

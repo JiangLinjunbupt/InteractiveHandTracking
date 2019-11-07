@@ -274,7 +274,7 @@ namespace DS
 		{
 			glPushMatrix();
 
-			GLfloat mat_ambient[] = { 0.05, 0.0, 0.0, 1.0 };
+			GLfloat mat_ambient[] = { 0.05, 0.05, 0.0, 1.0 };
 			GLfloat mat_diffuse[] = { 0.5, 0.4,0.4, 1.0 };
 			GLfloat mat_specular[] = { 0.7, 0.04, 0.04, 1.0 };
 			GLfloat no_shininess[] = { 0.78125 };
@@ -336,8 +336,8 @@ namespace DS
 
 		draw_HandModel();
 		draw_Interacted_Object();
-		draw_HandPointCloud();
-		draw_ObjectCloud();
+		//draw_HandPointCloud();
+		//draw_ObjectCloud();
 		draw_Coordinate();
 
 		glFlush();
@@ -345,9 +345,11 @@ namespace DS
 	}
 
 	void idle() {
-
-		mTrackingManager->Tracking(track);
-		mTrackingManager->ShowRenderAddColor();
+		if (pause)
+		{
+			mTrackingManager->Tracking(track);
+			mTrackingManager->ShowRenderAddColor();
+		}
 		glutPostRedisplay();
 	}
 
