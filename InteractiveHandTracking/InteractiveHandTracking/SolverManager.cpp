@@ -1,39 +1,20 @@
 #include"SolverManager.h"
 
-SolverManager::SolverManager(int start_points, Camera* _camera, Object_type obj_type)
+SolverManager::SolverManager(int start_points, Camera* _camera, vector<Object_type>& obj_type)
 {
 	mStartPoints = start_points;
 
 	for (int i = 0; i < mStartPoints; ++i)
 	{
-		Interacted_Object* tmpInteracted_Object;
-		HandModel* temHandmodel = new HandModel(_camera);
-
-		switch (obj_type)
-		{
-		case yellowSphere:
-			tmpInteracted_Object = new YellowSphere(_camera);
-			break;
-		case redCube:
-			tmpInteracted_Object = new RedCube(_camera);
-			break;
-		default:
-			tmpInteracted_Object = nullptr;
-			break;
-		}
-		Worker* tmpWorker = new Worker(tmpInteracted_Object, temHandmodel, _camera);
-
-		mInteracted_Object.push_back(tmpInteracted_Object);
-		mHandModel.push_back(temHandmodel);
+		Worker* tmpWorker = new Worker(_camera, obj_type);
 		mWorker.push_back(tmpWorker);
 	}
 }
 
-void SolverManager::Solve(vector<Eigen::VectorXf>& inputData, 
-	Image_InputData& imageData, 
-	Glove_InputData& gloveData,
-	bool previous_success, 
-	const Eigen::VectorXf& previous_best_estimation)
+void SolverManager::Solve(Image_InputData& imageData, Glove_InputData& gloveData,
+	vector<Eigen::VectorXf>& hand_init, vector<vector<Eigen::VectorXf>>& object_init,
+	bool pre_success,
+	Eigen::VectorXf& pre_handPrams, vector<Eigen::VectorXf>& pre_objectParams)
 {
 	std::vector<std::thread> threads;
 
@@ -42,11 +23,10 @@ void SolverManager::Solve(vector<Eigen::VectorXf>& inputData,
 		//这里创建线程的时候注意一定要是传入 mWorker的指针或者引用，不然会创建一个mWorker的临时对象，运算结果会随着临时对象被析构掉
 		threads.emplace_back(std::thread(&Worker::Tracking, 
 			mWorker[i], 
-			inputData[i], 
-			imageData, 
-			gloveData,
-			previous_success, 
-			previous_best_estimation));
+			imageData, gloveData,
+			hand_init[i], object_init[i],
+			pre_success,
+			pre_handPrams, pre_objectParams));
 	}
 	for (auto & th : threads)
 		th.join();
@@ -55,9 +35,8 @@ void SolverManager::Solve(vector<Eigen::VectorXf>& inputData,
 }
 
 
-void SolverManager::GetBestEstimation(float& error, 
-	bool& is_success, 
-	Eigen::VectorXf& params, 
+void SolverManager::GetBestEstimation(float& error, bool& is_success,
+	Eigen::VectorXf& hand_params, vector<Eigen::VectorXf>& obj_params,
 	Rendered_Images& rendered_images)
 {
 	float min_error = 100000.0;
@@ -80,7 +59,8 @@ void SolverManager::GetBestEstimation(float& error,
 	error = min_error;
 	if (bestIndex >= 0)
 	{
-		params = mWorker[bestIndex]->Total_Params;
+		hand_params = mWorker[bestIndex]->Hand_Params;
+		obj_params = mWorker[bestIndex]->Object_params;
 		rendered_images = mWorker[bestIndex]->mRendered_Images;
 	}
 }

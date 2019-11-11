@@ -22,11 +22,11 @@ private:
 	Camera* camera;
 	int currentFrame_idx = 0;
 	int MaxPixelNUM = 192;
-	Object_type mObject_type;
 	DistanceTransform distance_transform;
 
+	vector<Object_type> mObject_type;
 public:
-	RealSenseSensor(Camera* _camera, int maxPixelNUM = 192, Object_type object_type= yellowSphere);
+	RealSenseSensor(Camera* _camera, int maxPixelNUM, vector<Object_type>& object_type);
 	~RealSenseSensor();
 	bool concurrent_fetch_streams(Image_InputData& inputdata);
 	bool start();
@@ -39,10 +39,10 @@ private:
 	bool GetHandSegFromRealSense(cv::Mat& mask, PXCImage *depth, PXCHandData *handData, PXCHandData::ExtremityData &RightPalmCenter);
 	bool GetColorAndDepthImage(cv::Mat& depthImg,cv::Mat& colorImg, PXCProjection *projection, PXCImage *depth, PXCImage *color);
 
-	std::pair<bool, bool> SegObjectAndHand(cv::Mat& HandSegFromRealSense, cv::Mat& origin_color, cv::Mat& origin_depth, bool is_handSegFromRealsense, cv::Mat& objectMask, cv::Mat& handMask);
+	void SegObjectAndHand(cv::Mat& HandSegFromRealSense, cv::Mat& origin_color, cv::Mat& origin_depth, bool is_handSegFromRealsense);
 
-	bool SegHand(cv::Mat& depth, cv::Mat& hsv, cv::Mat& HandSegFromRealSense, bool is_handSegFromRealsense, cv::Mat& handMask);
-	bool SegObject(cv::Mat& depth, cv::Mat& hsv, cv::Mat& objectMask);
+	void SegHand(cv::Mat& depth, cv::Mat& hsv, cv::Mat& HandSegFromRealSense, bool is_handSegFromRealsense);
+	void SegObject(cv::Mat& depth, cv::Mat& hsv);
 
 	void DepthToPointCloud(Image_InputData& image_inputData);
 	void FindInscribedCircle(cv::Mat& silhouette, float& radius, Vector2& center);

@@ -1,195 +1,235 @@
 #include"Worker.h"
 
-Worker::Worker(Interacted_Object* _interacted_Object, HandModel* _handmodel, Camera* _camera) :mInteracted_Object(_interacted_Object), mHandModel(_handmodel),mCamera(_camera)
+Worker::Worker(Camera* _camera, vector<Object_type>& object_type)
 {
-	kalman = new Kalman(_handmodel);
+	mCamera = _camera;
+
+	//初始化人手相关
+	mHandModel = new HandModel(mCamera);
+	Hand_Params = Eigen::VectorXf::Zero(NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS);
+	mHandModel->set_Shape_Params(Hand_Params.head(NUM_HAND_SHAPE_PARAMS));
+	mHandModel->set_Pose_Params(Hand_Params.tail(NUM_HAND_POSE_PARAMS));
+	mHandModel->UpdataModel();
+
+	//初始化物体相关
+	for (size_t obj_id = 0; obj_id < object_type.size(); ++obj_id)
+	{
+		Interacted_Object* tmpObject = nullptr;
+		switch (object_type[obj_id])
+		{
+		case yellowSphere:
+			tmpObject = new YellowSphere(mCamera);
+			break;
+		case redCube:
+			tmpObject = new RedCube(mCamera);
+			break;
+		default:
+			break;
+		}
+		tmpObject->Update(Eigen::VectorXf::Zero(NUM_OBJECT_PARAMS));
+		mInteracted_Objects.push_back(tmpObject);
+		Object_params.emplace_back(Eigen::VectorXf::Zero(NUM_OBJECT_PARAMS));
+	}
+
+
+	//初始化跟踪相关参数
+	kalman = new Kalman(mHandModel);
 	mRendered_Images.init(mCamera->width(), mCamera->height());
 
 	tracking_error = 0.0f;
 	tracking_success = false;
 	itr = 0;
 	total_itr = 0;
-
-	while (!temporal_Object_params.empty()) temporal_Object_params.pop();
-	while (!temporal_finger_params.empty()) temporal_finger_params.pop();
-
 	mImage_InputData = nullptr;
 	Glove_params = Eigen::VectorXf::Zero(NUM_HAND_POSE_PARAMS);
-	Hand_Params = Eigen::VectorXf::Zero(NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS);
-	Object_params = Eigen::VectorXf::Zero(NUM_OBJECT_PARAMS);
-	Total_Params = Eigen::VectorXf::Zero(NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS + NUM_OBJECT_PARAMS);
 
 	Hand_correspond.clear();
-	Object_correspond.clear();
-
-	mInteracted_Object->Update(Object_params);
-	mHandModel->set_Shape_Params(Hand_Params.head(NUM_HAND_SHAPE_PARAMS));
-	mHandModel->set_Pose_Params(Hand_Params.tail(NUM_HAND_POSE_PARAMS));
-	mHandModel->UpdataModel();
+	Object_corresponds.resize(object_type.size());
+	num_Object_matched_correspond.resize(object_type.size());
+	temporal_Object_params.resize(object_type.size());
+	//------------------需要继续考虑
+	for(int i = 0;i<temporal_Object_params.size();++i)
+		while (!temporal_Object_params[i].empty()) temporal_Object_params[i].pop();
+	while (!temporal_Hand_params.empty()) temporal_Hand_params.pop();
 }
 
-void Worker::Tracking(const Eigen::VectorXf& startData, 
-	Image_InputData& imageData, 
-	Glove_InputData& gloveData,
-	bool previous_success, 
-	const Eigen::VectorXf& previous_best_estimation)
+void Worker::Tracking(Image_InputData& imageData, Glove_InputData& gloveData,
+	Eigen::VectorXf& hand_init, vector<Eigen::VectorXf>& object_init,
+	bool pre_success,
+	Eigen::VectorXf& pre_handPrams, vector<Eigen::VectorXf>& pre_objectParams)
 {
 	tracking_success = false;
 	itr = 0;
 
-	SetInputData(startData, imageData, gloveData, previous_success, previous_best_estimation);
-	SetTemporalInfo(previous_success, previous_best_estimation);
-
-	for (; itr < setting->max_itr; ++itr)
-	{
-		FindObjectCorrespond();
-		FindHandCorrespond();
-
-		One_tracking();
-	}
-
-	Evaluation();
-}
-
-void Worker::SetInputData(const Eigen::VectorXf& startData,
-	Image_InputData& imageData,
-	Glove_InputData& gloveData,
-	bool previous_success,
-	const Eigen::VectorXf& previous_best_estimation)
-{
 	Has_Glove = true;
 	//设置输入数据，再设置模型起始点
 	mImage_InputData = &imageData;
 	Glove_params = gloveData.params;
 
-	//设置人手
-	if (previous_success) Hand_Params.head(NUM_HAND_SHAPE_PARAMS) = previous_best_estimation.head(NUM_HAND_SHAPE_PARAMS);
+	SetHandInit(hand_init, pre_success, pre_handPrams);
+	SetObjectsInit(object_init, pre_success, pre_objectParams);
+	SetTemporalInfo(pre_success, pre_handPrams, pre_objectParams);
+	for (; itr < setting->max_itr; ++itr)
+	{
+		FindObjectCorrespond();
+		FindHandCorrespond();
+
+		Hand_one_tracking();
+		for (int obj_idx = 0; obj_idx < mInteracted_Objects.size(); ++obj_idx)
+		{
+			if(!mImage_InputData->item[obj_idx].loss_detect)
+				Object_one_tracking(obj_idx);
+		}
+
+		total_itr++;
+	}
+
+	Evaluation();
+}
+void Worker::SetHandInit(Eigen::VectorXf& hand_init, bool pre_success, Eigen::VectorXf& pre_handParams)
+{
+	if (pre_success) Hand_Params.head(NUM_HAND_SHAPE_PARAMS) = pre_handParams.head(NUM_HAND_SHAPE_PARAMS);
 	else
 	{
 		Hand_Params.head(NUM_HAND_SHAPE_PARAMS) = Eigen::VectorXf::Zero(NUM_HAND_SHAPE_PARAMS);
 		kalman->ReSet();
 	}
-	Hand_Params.tail(NUM_HAND_POSE_PARAMS) = startData.head(NUM_HAND_POSE_PARAMS);
+	Hand_Params.tail(NUM_HAND_POSE_PARAMS) = hand_init;
 	mHandModel->set_Pose_Params(Hand_Params.tail(NUM_HAND_POSE_PARAMS));
 	mHandModel->set_Shape_Params(Hand_Params.head(NUM_HAND_SHAPE_PARAMS));
 	mHandModel->UpdataModel();
-
-	//设置物体
-	Object_params = startData.tail(NUM_OBJECT_PARAMS);
-	mInteracted_Object->Update(Object_params);
-
-	//最后组成总的参数
-	Total_Params.head(NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS) = Hand_Params;
-	Total_Params.tail(NUM_OBJECT_PARAMS) = Object_params;
+}
+void Worker::SetObjectsInit(vector<Eigen::VectorXf>& object_init, bool pre_success, vector<Eigen::VectorXf>& pre_objectParams)
+{
+	//如果之前跟踪成功，并且不是第一次检测到该物体，则使用前一帧率的参数，否则使用初始化的帧率
+	for (size_t obj_id = 0; obj_id < mInteracted_Objects.size(); ++obj_id)
+	{
+		if (pre_success && (!mImage_InputData->item[obj_id].first_detect) && mImage_InputData->item[obj_id].now_detect)
+		{
+			Object_params[obj_id] = pre_objectParams[obj_id];
+			mInteracted_Objects[obj_id]->Update(Object_params[obj_id]);
+		}
+		else
+		{
+			Object_params[obj_id] = object_init[obj_id];
+			mInteracted_Objects[obj_id]->Update(Object_params[obj_id]);
+		}
+	}
 }
 
-void Worker::SetTemporalInfo(bool previous_success, const Eigen::VectorXf& previous_best_estimation)
+void Worker::SetTemporalInfo(bool pre_success, Eigen::VectorXf& pre_handPrams, vector<Eigen::VectorXf>& pre_objectParams)
 {
-	if (previous_success)
+	if (pre_success)
 	{
-		if (temporal_Object_params.size() == 2) {
-			temporal_Object_params.pop();
-			temporal_Object_params.push(previous_best_estimation.tail(NUM_OBJECT_PARAMS));
-		}
-		else
+		for (int obj_idx = 0; obj_idx < mInteracted_Objects.size(); ++obj_idx)
 		{
-			temporal_Object_params.push(previous_best_estimation.tail(NUM_OBJECT_PARAMS));
+			if (temporal_Object_params[obj_idx].size() == 2) {
+				temporal_Object_params[obj_idx].pop();
+				temporal_Object_params[obj_idx].push(pre_objectParams[obj_idx]);
+			}
+			else
+			{
+				temporal_Object_params[obj_idx].push(pre_objectParams[obj_idx]);
+			}
 		}
 
-		if (temporal_finger_params.size() == 2)
+		if (temporal_Hand_params.size() == 2)
 		{
-			temporal_finger_params.pop();
-			temporal_finger_params.push(previous_best_estimation.segment(NUM_HAND_SHAPE_PARAMS,NUM_HAND_POSE_PARAMS));
+			temporal_Hand_params.pop();
+			temporal_Hand_params.push(pre_handPrams.tail(NUM_HAND_FINGER_PARAMS));
 		}
 		else
 		{
-			temporal_finger_params.push(previous_best_estimation.segment(NUM_HAND_SHAPE_PARAMS, NUM_HAND_POSE_PARAMS));
+			temporal_Hand_params.push(pre_handPrams.tail(NUM_HAND_FINGER_PARAMS));
 		}
 	}
 	else
 	{
-		while (!temporal_Object_params.empty())
-			temporal_Object_params.pop();
-		while (!temporal_finger_params.empty())
-			temporal_finger_params.pop();
+		for (int obj_idx = 0; obj_idx<temporal_Object_params.size(); ++obj_idx)
+			while (!temporal_Object_params[obj_idx].empty()) temporal_Object_params[obj_idx].pop();
+		while (!temporal_Hand_params.empty())
+			temporal_Hand_params.pop();
 	}
 }
 
 void Worker::FindObjectCorrespond()
 {
-	Object_correspond.clear();
-
-	pcl::PointCloud<pcl::PointNormal> object_visible_cloud;
-	std::vector<int> visible_idx;
-	int Maxsize = mInteracted_Object->Final_Vertices.size();
-
-	object_visible_cloud.reserve(Maxsize);
-	visible_idx.reserve(Maxsize);
-
-	for (int i = 0; i < Maxsize; ++i)
+	for (int obj_id = 0; obj_id < mInteracted_Objects.size(); ++obj_id)
 	{
-		if (mInteracted_Object->Final_Normal[i].z() < 0)
+		Object_corresponds[obj_id].clear();
+
+		pcl::PointCloud<pcl::PointNormal> object_visible_cloud;
+		std::vector<int> visible_idx;
+		int Maxsize = mInteracted_Objects[obj_id]->Final_Vertices.size();
+
+		object_visible_cloud.reserve(Maxsize);
+		visible_idx.reserve(Maxsize);
+
+		for (int i = 0; i < Maxsize; ++i)
 		{
-			pcl::PointNormal p;
-			p.x = mInteracted_Object->Final_Vertices[i](0);
-			p.y = mInteracted_Object->Final_Vertices[i](1);
-			p.z = mInteracted_Object->Final_Vertices[i](2);
+			if (mInteracted_Objects[obj_id]->Final_Normal[i].z() < 0)
+			{
+				pcl::PointNormal p;
+				p.x = mInteracted_Objects[obj_id]->Final_Vertices[i](0);
+				p.y = mInteracted_Objects[obj_id]->Final_Vertices[i](1);
+				p.z = mInteracted_Objects[obj_id]->Final_Vertices[i](2);
 
-			p.normal_x = mInteracted_Object->Final_Normal[i](0);
-			p.normal_y = mInteracted_Object->Final_Normal[i](1);
-			p.normal_z = mInteracted_Object->Final_Normal[i](2);
+				p.normal_x = mInteracted_Objects[obj_id]->Final_Normal[i](0);
+				p.normal_y = mInteracted_Objects[obj_id]->Final_Normal[i](1);
+				p.normal_z = mInteracted_Objects[obj_id]->Final_Normal[i](2);
 
-			object_visible_cloud.points.push_back(p);
-			visible_idx.push_back(i);
+				object_visible_cloud.points.push_back(p);
+				visible_idx.push_back(i);
+			}
 		}
-	}
 
-	//然后再找对应点
-	int Numvisible = object_visible_cloud.size();
-	int NumPointCloud_sensor = mImage_InputData->item.pointcloud.points.size();
+		//然后再找对应点
+		int Numvisible = object_visible_cloud.size();
+		int NumPointCloud_sensor = mImage_InputData->item[obj_id].pointcloud.points.size();
 
-	if (Numvisible > 0 && NumPointCloud_sensor > 0)
-	{
-		Object_correspond.resize(NumPointCloud_sensor);
-		pcl::KdTreeFLANN<pcl::PointNormal> search_tree;
-		search_tree.setInputCloud(object_visible_cloud.makeShared());
-
-		const int k = 1;
-		std::vector<int> k_indices(k);
-		std::vector<float> k_squared_distance(k);
-
-		for (int i = 0; i < NumPointCloud_sensor; ++i)
+		if (Numvisible > 0 && NumPointCloud_sensor > 0)
 		{
-			search_tree.nearestKSearch(mImage_InputData->item.pointcloud, i, k, k_indices, k_squared_distance);
+			Object_corresponds[obj_id].resize(NumPointCloud_sensor);
+			pcl::KdTreeFLANN<pcl::PointNormal> search_tree;
+			search_tree.setInputCloud(object_visible_cloud.makeShared());
 
-			Eigen::Vector3f p = Eigen::Vector3f(mImage_InputData->item.pointcloud.points[i].x,
-				mImage_InputData->item.pointcloud.points[i].y,
-				mImage_InputData->item.pointcloud.points[i].z);
-			Object_correspond[i].pointcloud = p;
-			
+			const int k = 1;
+			std::vector<int> k_indices(k);
+			std::vector<float> k_squared_distance(k);
 
-			Eigen::Vector3f p_cor = Eigen::Vector3f(object_visible_cloud.points[k_indices[0]].x,
-				object_visible_cloud.points[k_indices[0]].y,
-				object_visible_cloud.points[k_indices[0]].z);
+			for (int i = 0; i < NumPointCloud_sensor; ++i)
+			{
+				search_tree.nearestKSearch(mImage_InputData->item[obj_id].pointcloud, i, k, k_indices, k_squared_distance);
 
-			Object_correspond[i].correspond = p_cor;
-			Object_correspond[i].correspond_idx = visible_idx[k_indices[0]];
+				Eigen::Vector3f p = Eigen::Vector3f(mImage_InputData->item[obj_id].pointcloud.points[i].x,
+					mImage_InputData->item[obj_id].pointcloud.points[i].y,
+					mImage_InputData->item[obj_id].pointcloud.points[i].z);
+				Object_corresponds[obj_id][i].pointcloud = p;
 
-			float distance = (p_cor - p).norm();
 
-			if (distance > 50)
-				Object_correspond[i].is_match = false;
-			else
-				Object_correspond[i].is_match = true;
+				Eigen::Vector3f p_cor = Eigen::Vector3f(object_visible_cloud.points[k_indices[0]].x,
+					object_visible_cloud.points[k_indices[0]].y,
+					object_visible_cloud.points[k_indices[0]].z);
+
+				Object_corresponds[obj_id][i].correspond = p_cor;
+				Object_corresponds[obj_id][i].correspond_idx = visible_idx[k_indices[0]];
+
+				float distance = (p_cor - p).norm();
+
+				if (distance > 50)
+					Object_corresponds[obj_id][i].is_match = false;
+				else
+					Object_corresponds[obj_id][i].is_match = true;
+			}
 		}
-	}
 
-	num_Object_matched_correspond = 0;
+		num_Object_matched_correspond[obj_id] = 0;
 
-	for (std::vector<DataAndCorrespond>::iterator itr = Object_correspond.begin(); itr != Object_correspond.end(); ++itr)
-	{
-		if (itr->is_match)
-			++num_Object_matched_correspond;
+		for (std::vector<DataAndCorrespond>::iterator itr = Object_corresponds[obj_id].begin(); itr != Object_corresponds[obj_id].end(); ++itr)
+		{
+			if (itr->is_match)
+				++num_Object_matched_correspond[obj_id];
+		}
 	}
 }
 
@@ -267,14 +307,12 @@ void Worker::FindHandCorrespond()
 	}
 }
 
-void Worker::One_tracking()
+void Worker::Hand_one_tracking()
 {
-	//初始化求解相关
 	LinearSystem linear_system;
-	linear_system.lhs = Eigen::MatrixXf::Zero(NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS + NUM_OBJECT_PARAMS, 
-		NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS + NUM_OBJECT_PARAMS);
-	linear_system.rhs = Eigen::VectorXf::Zero(NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS + NUM_OBJECT_PARAMS);
-
+	linear_system.lhs = Eigen::MatrixXf::Zero(NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS,
+		NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS);
+	linear_system.rhs = Eigen::VectorXf::Zero(NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS);
 
 	float error_3D = this->Fitting3D(linear_system);
 	this->Fitting2D(linear_system);
@@ -284,7 +322,6 @@ void Worker::One_tracking()
 		&& error_3D < 8.0f
 		&& !kalman->judgeFitted())  //尽量在更新的迭代后几次，并且跟踪成功的时候更新
 		kalman->Set_measured_hessian(linear_system);
-
 	this->MaxMinLimit(linear_system);
 	this->PcaLimit(linear_system);
 	if (Has_Glove)
@@ -303,293 +340,290 @@ void Worker::One_tracking()
 	//求解
 	Eigen::VectorXf solution = this->Solver(linear_system);
 
-	for (int i = 0; i < (NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS + NUM_OBJECT_PARAMS); ++i)
-		Total_Params[i] += solution[i];
+	for (int i = 0; i < (NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS); ++i)
+		Hand_Params[i] += solution[i];
 
 	//这里可以通过total_itr迭代次数判断，通过kalman更新形状参数的间隔
 	if (total_itr > 2 * setting->frames_interval_between_measurements
 		&& (total_itr % setting->frames_interval_between_measurements) == 0
 		&& error_3D < 8.0f
 		&& !kalman->judgeFitted())
-		kalman->Update_estimate(Total_Params.head(NUM_HAND_SHAPE_PARAMS));
-
+		kalman->Update_estimate(Hand_Params.head(NUM_HAND_SHAPE_PARAMS));
 
 	//更新参数
-	Hand_Params = Total_Params.head(NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS);
 	mHandModel->set_Shape_Params(Hand_Params.head(NUM_HAND_SHAPE_PARAMS));
 	mHandModel->set_Pose_Params(Hand_Params.tail(NUM_HAND_POSE_PARAMS));
 	mHandModel->UpdataModel();
+}
 
-	Object_params = Total_Params.tail(NUM_OBJECT_PARAMS);
-	mInteracted_Object->Update(Object_params);
+void Worker::Object_one_tracking(int obj_idx)
+{
+	//初始化求解相关
+	LinearSystem linear_system;
+	linear_system.lhs = Eigen::MatrixXf::Zero(NUM_OBJECT_PARAMS,NUM_OBJECT_PARAMS);
+	linear_system.rhs = Eigen::VectorXf::Zero(NUM_OBJECT_PARAMS);
 
-	total_itr++;
+
+	this->Object_Fitting_3D(linear_system, obj_idx);
+	this->Object_Fitting_2D(linear_system, obj_idx);
+	this->Object_TemporalLimit(linear_system, true, obj_idx);
+	this->Object_TemporalLimit(linear_system, false, obj_idx);
+	this->Object_CollisionLimit(linear_system, obj_idx);
+	this->Object_Damping(linear_system);
+
+	//求解
+	Eigen::VectorXf solution = this->Solver(linear_system);
+
+	for (int i = 0; i < NUM_OBJECT_PARAMS; ++i)
+		Object_params[obj_idx][i] += solution[i];
+
+	mInteracted_Objects[obj_idx]->Update(Object_params[obj_idx]);
 }
 
 float Worker::Fitting3D(LinearSystem& linear_system)
 {
 	float hand_3D_error = 0.0f;
 
-	//先弄人手的
+	int NumofCorrespond = num_Hand_matched_correspond;
+	Eigen::VectorXf e = Eigen::VectorXf::Zero(NumofCorrespond * 3);
+	Eigen::MatrixXf J = Eigen::MatrixXf::Zero(NumofCorrespond * 3, NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS);
+
+	Eigen::MatrixXf shape_jacob, pose_jacob;
+	int count = 0;
+	int Hand_correspond_size = Hand_correspond.size();
+	for (int i = 0; i < Hand_correspond_size; ++i)
 	{
-		int NumofCorrespond = num_Hand_matched_correspond;
-		Eigen::VectorXf e = Eigen::VectorXf::Zero(NumofCorrespond * 3);
-		Eigen::MatrixXf J = Eigen::MatrixXf::Zero(NumofCorrespond * 3, NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS);
-
-		Eigen::MatrixXf shape_jacob, pose_jacob;
-		int count = 0;
-		int Hand_correspond_size = Hand_correspond.size();
-		for (int i = 0; i < Hand_correspond_size; ++i)
+		if (Hand_correspond[i].is_match)
 		{
-			if (Hand_correspond[i].is_match)
-			{
-				int v_id = Hand_correspond[i].correspond_idx;
+			int v_id = Hand_correspond[i].correspond_idx;
 
-				e(count * 3 + 0) = Hand_correspond[i].pointcloud(0) - Hand_correspond[i].correspond(0);
-				e(count * 3 + 1) = Hand_correspond[i].pointcloud(1) - Hand_correspond[i].correspond(1);
-				e(count * 3 + 2) = Hand_correspond[i].pointcloud(2) - Hand_correspond[i].correspond(2);
+			e(count * 3 + 0) = Hand_correspond[i].pointcloud(0) - Hand_correspond[i].correspond(0);
+			e(count * 3 + 1) = Hand_correspond[i].pointcloud(1) - Hand_correspond[i].correspond(1);
+			e(count * 3 + 2) = Hand_correspond[i].pointcloud(2) - Hand_correspond[i].correspond(2);
 
-				float e_sqrt = sqrt(pow(e(count * 3 + 0), 2) + pow(e(count * 3 + 1), 2) + pow(e(count * 3 + 2), 2));
-				hand_3D_error += e_sqrt;
-				//这里使用的是Reweighted Least squard error
-				//参考：
-				//https://www.cs.bgu.ac.il/~mcv172/wiki.files/Lec5.pdf （主要）
-				//https://blog.csdn.net/baidu_17640849/article/details/71155537  （辅助）
-				//weight = s/(e^2 + s^2)
+			float e_sqrt = sqrt(pow(e(count * 3 + 0), 2) + pow(e(count * 3 + 1), 2) + pow(e(count * 3 + 2), 2));
+			hand_3D_error += e_sqrt;
+			//这里使用的是Reweighted Least squard error
+			//参考：
+			//https://www.cs.bgu.ac.il/~mcv172/wiki.files/Lec5.pdf （主要）
+			//https://blog.csdn.net/baidu_17640849/article/details/71155537  （辅助）
+			//weight = s/(e^2 + s^2)
 
 
-				//s越大，对异常值的容忍越大
-				float s = 50;
-				float weight = 1;
-				weight = (itr + 1) * s / (e_sqrt + s);
+			//s越大，对异常值的容忍越大
+			float s = 50;
+			float weight = 1;
+			weight = (itr + 1) * s / (e_sqrt + s);
 
-				weight = 6.5f / sqrt(e_sqrt + 0.001);
+			weight = 6.5f / sqrt(e_sqrt + 0.001);
 
-				e(count * 3 + 0) *= weight;
-				e(count * 3 + 1) *= weight;
-				e(count * 3 + 2) *= weight;
+			e(count * 3 + 0) *= weight;
+			e(count * 3 + 1) *= weight;
+			e(count * 3 + 2) *= weight;
 
-				mHandModel->Shape_jacobain(shape_jacob, v_id);
-				mHandModel->Pose_jacobain(pose_jacob, v_id);
+			mHandModel->Shape_jacobain(shape_jacob, v_id);
+			mHandModel->Pose_jacobain(pose_jacob, v_id);
 
-				J.block(count * 3, 0, 3, NUM_HAND_SHAPE_PARAMS) = shape_jacob;
-				J.block(count * 3, NUM_HAND_SHAPE_PARAMS, 3, NUM_HAND_POSE_PARAMS) = weight*pose_jacob;
+			J.block(count * 3, 0, 3, NUM_HAND_SHAPE_PARAMS) = shape_jacob;
+			J.block(count * 3, NUM_HAND_SHAPE_PARAMS, 3, NUM_HAND_POSE_PARAMS) = weight*pose_jacob;
 
-				++count;
-			}
+			++count;
 		}
-
-		hand_3D_error = hand_3D_error / count;
-
-		Eigen::MatrixXf JtJ = J.transpose()*J;
-		Eigen::VectorXf JTe = J.transpose()*e;
-
-		linear_system.lhs.block(0,0,
-			NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS, 
-			NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS) += setting->Hand_fitting_3D*JtJ;
-		linear_system.rhs.head(NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS) += setting->Hand_fitting_3D*JTe;
 	}
 
-	//再弄物体的
-	{
-		int NumofCorrespond = num_Object_matched_correspond;
-		Eigen::VectorXf e = Eigen::VectorXf::Zero(NumofCorrespond * 3);
-		Eigen::MatrixXf J = Eigen::MatrixXf::Zero(NumofCorrespond * 3, NUM_OBJECT_PARAMS);
+	hand_3D_error = hand_3D_error / count;
 
-		//临时变量
-		Eigen::MatrixXf tmp_jacob;
-		int count = 0;
-		int Object_correspond_size = Object_correspond.size();
-
-		for (int i = 0; i < Object_correspond_size; ++i)
-		{
-			if (Object_correspond[i].is_match)
-			{
-				int v_id = Object_correspond[i].correspond_idx;
-
-				e(count * 3 + 0) = Object_correspond[i].pointcloud(0) - Object_correspond[i].correspond(0);
-				e(count * 3 + 1) = Object_correspond[i].pointcloud(1) - Object_correspond[i].correspond(1);
-				e(count * 3 + 2) = Object_correspond[i].pointcloud(2) - Object_correspond[i].correspond(2);
-
-				float e_sqrt = sqrt(pow(e(count * 3 + 0), 2) + pow(e(count * 3 + 1), 2) + pow(e(count * 3 + 2), 2));
-				//这里使用的是Reweighted Least squard error
-				//参考：
-				//https://www.cs.bgu.ac.il/~mcv172/wiki.files/Lec5.pdf （主要）
-				//https://blog.csdn.net/baidu_17640849/article/details/71155537  （辅助）
-				//weight = s/(e^2 + s^2)
-
-
-				//s越大，对异常值的容忍越大
-				float s = 50;
-				float weight = 1;
-				weight = (itr + 1) * s / (e_sqrt + s);
-
-				weight = 6.5f / sqrt(e_sqrt + 0.001);
-
-				e(count * 3 + 0) *= weight;
-				e(count * 3 + 1) *= weight;
-				e(count * 3 + 2) *= weight;
-
-				mInteracted_Object->object_jacobain(tmp_jacob, v_id);
-				J.block(count * 3, 0, 3, NUM_OBJECT_PARAMS) = tmp_jacob;
-				++count;
-			}
-		}
-
-		Eigen::MatrixXf JtJ = J.transpose()*J;
-		Eigen::VectorXf JTe = J.transpose()*e;
-
-		linear_system.lhs.block(NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS,
-			NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS,
-			NUM_OBJECT_PARAMS,NUM_OBJECT_PARAMS) += setting->Object_fitting_3D*JtJ;
-		linear_system.rhs.tail(NUM_OBJECT_PARAMS) += setting->Object_fitting_3D*JTe;
-	}
+	linear_system.lhs += setting->Hand_fitting_3D*J.transpose()*J;
+	linear_system.rhs += setting->Hand_fitting_3D*J.transpose()*e;
 
 	return hand_3D_error;
+}
+
+void Worker::Object_Fitting_3D(LinearSystem& linear_system, int obj_idx)
+{
+	int NumofCorrespond = num_Object_matched_correspond[obj_idx];
+	Eigen::VectorXf e = Eigen::VectorXf::Zero(NumofCorrespond * 3);
+	Eigen::MatrixXf J = Eigen::MatrixXf::Zero(NumofCorrespond * 3, NUM_OBJECT_PARAMS);
+
+	//临时变量
+	Eigen::MatrixXf tmp_jacob;
+	int count = 0;
+	int Object_correspond_size = Object_corresponds[obj_idx].size();
+
+	for (int i = 0; i < Object_correspond_size; ++i)
+	{
+		if (Object_corresponds[obj_idx][i].is_match)
+		{
+			int v_id = Object_corresponds[obj_idx][i].correspond_idx;
+
+			e(count * 3 + 0) = Object_corresponds[obj_idx][i].pointcloud(0) - Object_corresponds[obj_idx][i].correspond(0);
+			e(count * 3 + 1) = Object_corresponds[obj_idx][i].pointcloud(1) - Object_corresponds[obj_idx][i].correspond(1);
+			e(count * 3 + 2) = Object_corresponds[obj_idx][i].pointcloud(2) - Object_corresponds[obj_idx][i].correspond(2);
+
+			float e_sqrt = sqrt(pow(e(count * 3 + 0), 2) + pow(e(count * 3 + 1), 2) + pow(e(count * 3 + 2), 2));
+			//这里使用的是Reweighted Least squard error
+			//参考：
+			//https://www.cs.bgu.ac.il/~mcv172/wiki.files/Lec5.pdf （主要）
+			//https://blog.csdn.net/baidu_17640849/article/details/71155537  （辅助）
+			//weight = s/(e^2 + s^2)
+
+
+			//s越大，对异常值的容忍越大
+			float s = 50;
+			float weight = 1;
+			weight = (itr + 1) * s / (e_sqrt + s);
+
+			weight = 6.5f / sqrt(e_sqrt + 0.001);
+
+			e(count * 3 + 0) *= weight;
+			e(count * 3 + 1) *= weight;
+			e(count * 3 + 2) *= weight;
+
+			mInteracted_Objects[obj_idx]->object_jacobain(tmp_jacob, v_id);
+			J.block(count * 3, 0, 3, NUM_OBJECT_PARAMS) = tmp_jacob;
+			++count;
+		}
+	}
+
+	linear_system.lhs += setting->Object_fitting_3D*J.transpose()*J;
+	linear_system.rhs += setting->Object_fitting_3D*J.transpose()*e;
 }
 
 void Worker::Fitting2D(LinearSystem& linear_system)
 {
 	int width = mCamera->width();
 	int height = mCamera->height();
-	//先弄人手的
+
+	vector<pair<Eigen::Matrix2Xf, Eigen::Vector2f>> JacobVector_2D;
+
+	int visiblePointSize = mHandModel->V_Visible_2D.size();
+
+	for (int i = 0; i < visiblePointSize; ++i)
 	{
-		vector<pair<Eigen::Matrix2Xf, Eigen::Vector2f>> JacobVector_2D;
+		int idx = mHandModel->V_Visible_2D[i].second;
 
-		int visiblePointSize = mHandModel->V_Visible_2D.size();
+		Eigen::Vector3f pixel_3D_pos(mHandModel->V_Final(idx, 0), mHandModel->V_Final(idx, 1), mHandModel->V_Final(idx, 2));
+		Eigen::Vector2i pixel_2D_pos(mHandModel->V_Visible_2D[i].first);
 
-		Eigen::MatrixXf shape_jacob, pose_jacob;
-
-		for (int i = 0; i < visiblePointSize; ++i)
+		if (pixel_2D_pos.x() >= 0 && pixel_2D_pos.x() < width && pixel_2D_pos.y() >= 0 && pixel_2D_pos.y() < height)
 		{
-			int idx = mHandModel->V_Visible_2D[i].second;
+			int cloest_idx = mImage_InputData->idxs_image[pixel_2D_pos(1) * width + pixel_2D_pos(0)];
+			Eigen::Vector2i pixel_2D_cloest;
+			pixel_2D_cloest << cloest_idx%width, cloest_idx / width;
 
-			Eigen::Vector3f pixel_3D_pos(mHandModel->V_Final(idx, 0), mHandModel->V_Final(idx, 1), mHandModel->V_Final(idx, 2));
-			Eigen::Vector2i pixel_2D_pos(mHandModel->V_Visible_2D[i].first);
+			float closet_distance = (pixel_2D_cloest - pixel_2D_pos).norm();
 
-			if (pixel_2D_pos.x() >= 0 && pixel_2D_pos.x() < width && pixel_2D_pos.y() >= 0 && pixel_2D_pos.y() < height)
+			if (closet_distance > 0)
 			{
-				int cloest_idx = mImage_InputData->idxs_image[pixel_2D_pos(1) * width + pixel_2D_pos(0)];
-				Eigen::Vector2i pixel_2D_cloest;
-				pixel_2D_cloest << cloest_idx%width, cloest_idx / width;
+				//计算 J 和 e
+				pair<Eigen::Matrix2Xf, Eigen::Vector2f> J_and_e;
 
-				float closet_distance = (pixel_2D_cloest - pixel_2D_pos).norm();
+				//先算e
+				Eigen::Vector2f e;
+				e(0) = (float)pixel_2D_cloest(0) - (float)pixel_2D_pos(0);
+				e(1) = (float)pixel_2D_cloest(1) - (float)pixel_2D_pos(1);
 
-				if (closet_distance > 0)
-				{
-					//计算 J 和 e
-					pair<Eigen::Matrix2Xf, Eigen::Vector2f> J_and_e;
+				J_and_e.second = e;
 
-					//先算e
-					Eigen::Vector2f e;
-					e(0) = (float)pixel_2D_cloest(0) - (float)pixel_2D_pos(0);
-					e(1) = (float)pixel_2D_cloest(1) - (float)pixel_2D_pos(1);
+				//再计算J
+				Eigen::Matrix<float, 2, 3> J_perspective = mCamera->projection_jacobian(pixel_3D_pos);
+				Eigen::MatrixXf J_3D;
 
-					J_and_e.second = e;
+				mHandModel->Pose_jacobain(J_3D, idx);
+				J_and_e.first = J_perspective * J_3D;
 
-					//再计算J
-					Eigen::Matrix<float, 2, 3> J_perspective = mCamera->projection_jacobian(pixel_3D_pos);
-					Eigen::MatrixXf J_3D = Eigen::MatrixXf::Zero(3, NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS);
-
-					mHandModel->Shape_jacobain(shape_jacob, idx);
-					mHandModel->Pose_jacobain(pose_jacob, idx);
-
-					J_3D.block(0, 0, 3, NUM_HAND_SHAPE_PARAMS) = shape_jacob;
-					J_3D.block(0, NUM_HAND_SHAPE_PARAMS, 3, NUM_HAND_POSE_PARAMS) = pose_jacob;
-
-					J_and_e.first = J_perspective * J_3D;
-
-					JacobVector_2D.push_back(J_and_e);
-				}
+				JacobVector_2D.push_back(J_and_e);
 			}
-
 		}
 
-		int size = JacobVector_2D.size();
+	}
 
-		if (size > 0)
+	int size = JacobVector_2D.size();
+
+	if (size > 0)
+	{
+		Eigen::MatrixXf J_2D = Eigen::MatrixXf::Zero(2 * size, NUM_HAND_POSE_PARAMS);
+		Eigen::VectorXf e_2D = Eigen::VectorXf::Zero(2 * size);
+
+		for (int i = 0; i < size; ++i)
 		{
-			Eigen::MatrixXf J_2D = Eigen::MatrixXf::Zero(2 * size, NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS);
-			Eigen::VectorXf e_2D = Eigen::VectorXf::Zero(2 * size);
+			J_2D.block(i * 2, 0, 2, NUM_HAND_POSE_PARAMS) = JacobVector_2D[i].first;
+			e_2D.segment(i * 2, 2) = JacobVector_2D[i].second;
+		}
 
-			for (int i = 0; i < size; ++i)
+		linear_system.lhs.block(NUM_HAND_SHAPE_PARAMS, NUM_HAND_SHAPE_PARAMS,
+			NUM_HAND_POSE_PARAMS,NUM_HAND_POSE_PARAMS) += setting->Hand_fitting_2D * J_2D.transpose() * J_2D;
+		linear_system.rhs.tail(NUM_HAND_POSE_PARAMS) += setting->Hand_fitting_2D * J_2D.transpose() * e_2D;
+	}
+}
+
+void Worker::Object_Fitting_2D(LinearSystem& linear_system, int obj_idx)
+{
+	int width = mCamera->width();
+	int height = mCamera->height();
+
+	vector<pair<Eigen::Matrix2Xf, Eigen::Vector2f>> JacobVector_2D;
+
+	int visiblePointSize = mInteracted_Objects[obj_idx]->Visible_2D.size();
+
+	Eigen::MatrixXf tmp_jacob;
+
+	for (int i = 0; i < visiblePointSize; ++i)
+	{
+		int idx = mInteracted_Objects[obj_idx]->Visible_2D[i].second;
+
+		Eigen::Vector3f pixel_3D_pos = mInteracted_Objects[obj_idx]->Final_Vertices[idx];
+		Eigen::Vector2i pixel_2D_pos = Eigen::Vector2i(mInteracted_Objects[obj_idx]->Visible_2D[i].first.x(), 
+			mInteracted_Objects[obj_idx]->Visible_2D[i].first.y());
+
+		if (pixel_2D_pos.x() >= 0 && pixel_2D_pos.x() < width && pixel_2D_pos.y() >= 0 && pixel_2D_pos.y() < height)
+		{
+			int cloest_idx = mImage_InputData->idxs_image[pixel_2D_pos(1) * width + pixel_2D_pos(0)];
+			Eigen::Vector2i pixel_2D_cloest;
+			pixel_2D_cloest << cloest_idx%width, cloest_idx / width;
+
+			float closet_distance = (pixel_2D_cloest - pixel_2D_pos).norm();
+
+			if (closet_distance > 0)
 			{
-				J_2D.block(i * 2, 0, 2, NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS) = JacobVector_2D[i].first;
-				e_2D.segment(i * 2, 2) = JacobVector_2D[i].second;
-			}
+				//计算 J 和 e
+				pair<Eigen::Matrix2Xf, Eigen::Vector2f> J_and_e;
 
-			linear_system.lhs.block(0,0,
-				NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS,
-				NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS )+= setting->Hand_fitting_2D * J_2D.transpose() * J_2D;
-			linear_system.rhs.head(NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS) += setting->Hand_fitting_2D * J_2D.transpose() * e_2D;
+				//先算e
+				Eigen::Vector2f e;
+				e(0) = (float)pixel_2D_cloest(0) - (float)pixel_2D_pos(0);
+				e(1) = (float)pixel_2D_cloest(1) - (float)pixel_2D_pos(1);
+
+				J_and_e.second = e;
+
+				//再计算J
+				Eigen::Matrix<float, 2, 3> J_perspective = mCamera->projection_jacobian(pixel_3D_pos);
+				mInteracted_Objects[obj_idx]->object_jacobain(tmp_jacob, idx);
+
+				J_and_e.first = J_perspective * tmp_jacob;
+
+				JacobVector_2D.push_back(J_and_e);
+			}
 		}
 	}
 
-	//再弄物体的
+	int size = JacobVector_2D.size();
+
+	if (size > 0)
 	{
-		vector<pair<Eigen::Matrix2Xf, Eigen::Vector2f>> JacobVector_2D;
+		Eigen::MatrixXf J_2D = Eigen::MatrixXf::Zero(2 * size, NUM_OBJECT_PARAMS);
+		Eigen::VectorXf e_2D = Eigen::VectorXf::Zero(2 * size);
 
-		int visiblePointSize = mInteracted_Object->Visible_2D.size();
-
-		Eigen::MatrixXf tmp_jacob;
-
-		for (int i = 0; i < visiblePointSize; ++i)
+		for (int i = 0; i < size; ++i)
 		{
-			int idx = mInteracted_Object->Visible_2D[i].second;
-
-			Eigen::Vector3f pixel_3D_pos = mInteracted_Object->Final_Vertices[idx];
-			Eigen::Vector2i pixel_2D_pos = Eigen::Vector2i(mInteracted_Object->Visible_2D[i].first.x(), mInteracted_Object->Visible_2D[i].first.y());
-
-			if (pixel_2D_pos.x() >= 0 && pixel_2D_pos.x() < width && pixel_2D_pos.y() >= 0 && pixel_2D_pos.y() < height)
-			{
-				int cloest_idx = mImage_InputData->idxs_image[pixel_2D_pos(1) * width + pixel_2D_pos(0)];
-				Eigen::Vector2i pixel_2D_cloest;
-				pixel_2D_cloest << cloest_idx%width, cloest_idx / width;
-
-				float closet_distance = (pixel_2D_cloest - pixel_2D_pos).norm();
-
-				if (closet_distance > 0)
-				{
-					//计算 J 和 e
-					pair<Eigen::Matrix2Xf, Eigen::Vector2f> J_and_e;
-
-					//先算e
-					Eigen::Vector2f e;
-					e(0) = (float)pixel_2D_cloest(0) - (float)pixel_2D_pos(0);
-					e(1) = (float)pixel_2D_cloest(1) - (float)pixel_2D_pos(1);
-
-					J_and_e.second = e;
-
-					//再计算J
-					Eigen::Matrix<float, 2, 3> J_perspective = mCamera->projection_jacobian(pixel_3D_pos);
-					mInteracted_Object->object_jacobain(tmp_jacob, idx);
-
-					J_and_e.first = J_perspective * tmp_jacob;
-
-					JacobVector_2D.push_back(J_and_e);
-				}
-			}
+			J_2D.block(i * 2, 0, 2, NUM_OBJECT_PARAMS) = JacobVector_2D[i].first;
+			e_2D.segment(i * 2, 2) = JacobVector_2D[i].second;
 		}
 
-		int size = JacobVector_2D.size();
-
-		if (size > 0)
-		{
-			Eigen::MatrixXf J_2D = Eigen::MatrixXf::Zero(2 * size, NUM_OBJECT_PARAMS);
-			Eigen::VectorXf e_2D = Eigen::VectorXf::Zero(2 * size);
-
-			for (int i = 0; i < size; ++i)
-			{
-				J_2D.block(i * 2, 0, 2, NUM_OBJECT_PARAMS) = JacobVector_2D[i].first;
-				e_2D.segment(i * 2, 2) = JacobVector_2D[i].second;
-			}
-
-			linear_system.lhs.block(NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS,
-				NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS,
-				NUM_OBJECT_PARAMS, NUM_OBJECT_PARAMS) += setting->Object_fitting_2D * J_2D.transpose() * J_2D;
-			linear_system.rhs.tail(NUM_OBJECT_PARAMS) += setting->Object_fitting_2D * J_2D.transpose() * e_2D;
-		}
+		linear_system.lhs += setting->Object_fitting_2D * J_2D.transpose() * J_2D;
+		linear_system.rhs += setting->Object_fitting_2D * J_2D.transpose() * e_2D;
 	}
+
 }
 
 void Worker::MaxMinLimit(LinearSystem& linear_system)
@@ -619,13 +653,10 @@ void Worker::MaxMinLimit(LinearSystem& linear_system)
 		}
 	}
 
-	Eigen::MatrixXf JtJ = J_limit.transpose()*J_limit;
-	Eigen::VectorXf JTe = J_limit.transpose()*e_limit;
-
 	linear_system.lhs.block(NUM_HAND_SHAPE_PARAMS + NUM_HAND_GLOBAL_PARAMS, 
 		NUM_HAND_SHAPE_PARAMS + NUM_HAND_GLOBAL_PARAMS,
-		NUM_HAND_FINGER_PARAMS,NUM_HAND_FINGER_PARAMS) += setting->Hand_Pose_MaxMinLimit_weight*JtJ;
-	(linear_system.rhs.head(NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS)).tail(NUM_HAND_FINGER_PARAMS) += setting->Hand_Pose_MaxMinLimit_weight*JTe;
+		NUM_HAND_FINGER_PARAMS,NUM_HAND_FINGER_PARAMS) += setting->Hand_Pose_MaxMinLimit_weight*J_limit.transpose()*J_limit;
+	linear_system.rhs.tail(NUM_HAND_FINGER_PARAMS) += setting->Hand_Pose_MaxMinLimit_weight*J_limit.transpose()*e_limit;
 }
 
 void Worker::PcaLimit(LinearSystem& linear_system)
@@ -670,7 +701,7 @@ void Worker::PcaLimit(LinearSystem& linear_system)
 	linear_system.lhs.block(NUM_HAND_SHAPE_PARAMS + NUM_HAND_GLOBAL_PARAMS,
 		NUM_HAND_SHAPE_PARAMS + NUM_HAND_GLOBAL_PARAMS,
 		NUM_HAND_FINGER_PARAMS, NUM_HAND_FINGER_PARAMS) += JtJ;
-	(linear_system.rhs.head(NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS)).tail(NUM_HAND_FINGER_PARAMS) += JTe;
+	linear_system.rhs.tail(NUM_HAND_FINGER_PARAMS) += JTe;
 }
 
 void Worker::GloveDifferenceMaxMinPCALimit(LinearSystem& linear_system)
@@ -708,7 +739,7 @@ void Worker::GloveDifferenceMaxMinPCALimit(LinearSystem& linear_system)
 	linear_system.lhs.block(NUM_HAND_SHAPE_PARAMS + NUM_HAND_GLOBAL_PARAMS,
 		NUM_HAND_SHAPE_PARAMS + NUM_HAND_GLOBAL_PARAMS, 
 		NUM_HAND_FINGER_PARAMS,NUM_HAND_FINGER_PARAMS) += setting->Hand_Pose_Difference_MAXMIN_PCA_weight*J_GloveDifferenceMaxMinPCALimit.transpose() * J_GloveDifferenceMaxMinPCALimit;
-	(linear_system.rhs.head(NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS)).tail(NUM_HAND_FINGER_PARAMS) += setting->Hand_Pose_Difference_MAXMIN_PCA_weight*J_GloveDifferenceMaxMinPCALimit.transpose() * e_GloveDifferenceMaxMinPCALimit;
+	linear_system.rhs.tail(NUM_HAND_FINGER_PARAMS) += setting->Hand_Pose_Difference_MAXMIN_PCA_weight*J_GloveDifferenceMaxMinPCALimit.transpose() * e_GloveDifferenceMaxMinPCALimit;
 }
 
 void Worker::GloveDifferenceVarPCALimit(LinearSystem& linear_system)
@@ -738,82 +769,57 @@ void Worker::GloveDifferenceVarPCALimit(LinearSystem& linear_system)
 	linear_system.lhs.block(NUM_HAND_SHAPE_PARAMS + NUM_HAND_GLOBAL_PARAMS,
 		NUM_HAND_SHAPE_PARAMS + NUM_HAND_GLOBAL_PARAMS,
 		NUM_HAND_FINGER_PARAMS, NUM_HAND_FINGER_PARAMS) += setting->Hand_Pose_Difference_Var_PCA_weight*J_GloveDifferenceVarPCALimit.transpose() * J_GloveDifferenceVarPCALimit;
-	(linear_system.rhs.head(NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS)).tail(NUM_HAND_FINGER_PARAMS) += setting->Hand_Pose_Difference_Var_PCA_weight*J_GloveDifferenceVarPCALimit.transpose() * e_GloveDifferenceVarPCALimit;
+	linear_system.rhs.tail(NUM_HAND_FINGER_PARAMS) += setting->Hand_Pose_Difference_Var_PCA_weight*J_GloveDifferenceVarPCALimit.transpose() * e_GloveDifferenceVarPCALimit;
 }
 
 void Worker::TemporalLimit(LinearSystem& linear_system, bool first_order)
 {
-	//先弄人手
+	if (temporal_Hand_params.size() == 2)
 	{
-		Eigen::MatrixXf J_Tem = Eigen::MatrixXf::Identity(NUM_HAND_POSE_PARAMS, NUM_HAND_POSE_PARAMS);
-		Eigen::VectorXf e_Tem = Eigen::VectorXf::Zero(NUM_HAND_POSE_PARAMS);
+		Eigen::MatrixXf J_Tem = Eigen::MatrixXf::Identity(NUM_HAND_FINGER_PARAMS, NUM_HAND_FINGER_PARAMS);
+		Eigen::VectorXf e_Tem = Eigen::VectorXf::Zero(NUM_HAND_FINGER_PARAMS);
 
-		if (temporal_finger_params.size() == 2)
-		{
-			for (int i = 0; i < NUM_HAND_POSE_PARAMS; ++i)
-			{
-				int index = NUM_HAND_SHAPE_PARAMS + i;
-
-				if (first_order)
-				{
-					e_Tem(i) = temporal_finger_params.back()(i) - Hand_Params(index);
-				}
-				else
-				{
-					e_Tem(i) = 2 * temporal_finger_params.back()(i) - temporal_finger_params.front()(i) - Hand_Params(index);
-				}
-			}
-		}
+		if (first_order)
+			e_Tem = temporal_Hand_params.back() - Hand_Params.tail(NUM_HAND_FINGER_PARAMS);
+		else
+			e_Tem = 2 * temporal_Hand_params.back() - temporal_Hand_params.front() - Hand_Params.tail(NUM_HAND_FINGER_PARAMS);
 
 		if (first_order)
 		{
-			linear_system.lhs.block(NUM_HAND_SHAPE_PARAMS,NUM_HAND_SHAPE_PARAMS,
-				NUM_HAND_POSE_PARAMS,NUM_HAND_POSE_PARAMS) += setting->Temporal_finger_params_FirstOrder_weight*J_Tem.transpose()*J_Tem;
-			(linear_system.rhs.head(NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS)).tail(NUM_HAND_POSE_PARAMS) += setting->Temporal_finger_params_FirstOrder_weight*J_Tem.transpose()*e_Tem;
+			linear_system.lhs.block(NUM_HAND_SHAPE_PARAMS + NUM_HAND_GLOBAL_PARAMS, NUM_HAND_SHAPE_PARAMS + NUM_HAND_GLOBAL_PARAMS,
+				NUM_HAND_FINGER_PARAMS, NUM_HAND_FINGER_PARAMS) += setting->Temporal_finger_params_FirstOrder_weight*J_Tem.transpose()*J_Tem;
+			linear_system.rhs.tail(NUM_HAND_FINGER_PARAMS) += setting->Temporal_finger_params_FirstOrder_weight*J_Tem.transpose()*e_Tem;
 		}
 		else
 		{
-			linear_system.lhs.block(NUM_HAND_SHAPE_PARAMS, NUM_HAND_SHAPE_PARAMS,
-				NUM_HAND_POSE_PARAMS, NUM_HAND_POSE_PARAMS) += setting->Temporal_finger_params_SecondOorder_weight*J_Tem.transpose()*J_Tem;
-			(linear_system.rhs.head(NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS)).tail(NUM_HAND_POSE_PARAMS) += setting->Temporal_finger_params_SecondOorder_weight*J_Tem.transpose()*e_Tem;
+			linear_system.lhs.block(NUM_HAND_SHAPE_PARAMS + NUM_HAND_GLOBAL_PARAMS, NUM_HAND_SHAPE_PARAMS + NUM_HAND_GLOBAL_PARAMS,
+				NUM_HAND_FINGER_PARAMS, NUM_HAND_FINGER_PARAMS) += setting->Temporal_finger_params_SecondOorder_weight*J_Tem.transpose()*J_Tem;
+			linear_system.rhs.tail(NUM_HAND_FINGER_PARAMS) += setting->Temporal_finger_params_SecondOorder_weight*J_Tem.transpose()*e_Tem;
 		}
 	}
+}
 
-	//再弄物体
+void Worker::Object_TemporalLimit(LinearSystem& linear_system, bool first_order, int obj_idx)
+{
+	if (temporal_Object_params[obj_idx].size() == 2)
 	{
 		Eigen::MatrixXf J_Tem = Eigen::MatrixXf::Identity(NUM_OBJECT_PARAMS, NUM_OBJECT_PARAMS);
 		Eigen::VectorXf e_Tem = Eigen::VectorXf::Zero(NUM_OBJECT_PARAMS);
 
-		Eigen::MatrixXf joint_jacob;
-
-		if (temporal_Object_params.size() == 2)
-		{
-			for (int i = 0; i < NUM_OBJECT_PARAMS; ++i)
-			{
-				if (first_order)
-				{
-					e_Tem(i) = temporal_Object_params.back()(i) - Object_params(i);
-				}
-				else
-				{
-					e_Tem(i) = 2 * temporal_Object_params.back()(i) - temporal_Object_params.front()(i) - Object_params(i);
-				}
-			}
-		}
+		if (first_order)
+			e_Tem = temporal_Object_params[obj_idx].back() - Object_params[obj_idx];
+		else
+			e_Tem = 2*temporal_Object_params[obj_idx].back() - temporal_Object_params[obj_idx].front() - Object_params[obj_idx];
 
 		if (first_order)
 		{
-			linear_system.lhs.block(NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS,
-				NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS,
-				NUM_OBJECT_PARAMS,NUM_OBJECT_PARAMS) += setting->Object_Temporal_firstOrder_weight*J_Tem.transpose()*J_Tem;
-			linear_system.rhs.tail(NUM_OBJECT_PARAMS) += setting->Object_Temporal_firstOrder_weight*J_Tem.transpose()*e_Tem;
+			linear_system.lhs += setting->Object_Temporal_firstOrder_weight*J_Tem.transpose()*J_Tem;
+			linear_system.rhs += setting->Object_Temporal_firstOrder_weight*J_Tem.transpose()*e_Tem;
 		}
 		else
 		{
-			linear_system.lhs.block(NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS,
-				NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS,
-				NUM_OBJECT_PARAMS, NUM_OBJECT_PARAMS) += setting->Object_Temporal_secondOrder_weight*J_Tem.transpose()*J_Tem;
-			linear_system.rhs.tail(NUM_OBJECT_PARAMS) += setting->Object_Temporal_secondOrder_weight*J_Tem.transpose()*e_Tem;
+			linear_system.lhs += setting->Object_Temporal_secondOrder_weight*J_Tem.transpose()*J_Tem;
+			linear_system.rhs += setting->Object_Temporal_secondOrder_weight*J_Tem.transpose()*e_Tem;
 		}
 	}
 }
@@ -869,6 +875,11 @@ void Worker::CollisionLimit(LinearSystem& linear_system)
 	}
 }
 
+void Worker::Object_CollisionLimit(LinearSystem& linear_system, int obj_idx)
+{
+	return;
+}
+
 void Worker::RigidOnly(LinearSystem& linear_system)
 {
 	for (int row = 0; row < NUM_HAND_SHAPE_PARAMS; ++row)
@@ -890,57 +901,50 @@ void Worker::RigidOnly(LinearSystem& linear_system)
 
 void Worker::Damping(LinearSystem& linear_system)
 {
-	//先弄人手的
+	Eigen::MatrixXf D = Eigen::MatrixXf::Identity(NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS, NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS);
+
+	D.block(0, 0, NUM_HAND_SHAPE_PARAMS, NUM_HAND_SHAPE_PARAMS) = setting->Hand_Shape_Damping_weight * Eigen::MatrixXf::Identity(NUM_HAND_SHAPE_PARAMS, NUM_HAND_SHAPE_PARAMS);
+
+	for (int i = 0; i < 48; ++i)
 	{
-		Eigen::MatrixXf D = Eigen::MatrixXf::Identity(NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS, NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS);
-
-		D.block(0, 0, NUM_HAND_SHAPE_PARAMS, NUM_HAND_SHAPE_PARAMS) = setting->Hand_Shape_Damping_weight * Eigen::MatrixXf::Identity(NUM_HAND_SHAPE_PARAMS, NUM_HAND_SHAPE_PARAMS);
-
-		for (int i = 0; i < 48; ++i)
+		if (i == 3 || i == 6 || i == 7 || i == 9 || i == 10 ||
+			i == 12 || i == 15 || i == 16 || i == 18 || i == 19 ||
+			i == 21 || i == 24 || i == 25 || i == 27 || i == 28 ||
+			i == 30 || i == 33 || i == 34 || i == 36 || i == 37 ||
+			i == 39 || i == 42 || i == 44 || i == 45 || i == 47)
 		{
-			if (i == 3 || i == 6 || i == 7 || i == 9 || i == 10 ||
-				i == 12 || i == 15 || i == 16 || i == 18 || i == 19 ||
-				i == 21 || i == 24 || i == 25 || i == 27 || i == 28 ||
-				i == 30 || i == 33 || i == 34 || i == 36 || i == 37 ||
-				i == 39 || i == 42 || i == 44 || i == 45 || i == 47)
-			{
-				int index = NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSITION_PARAMS + i;
+			int index = NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSITION_PARAMS + i;
 
-				D(index, index) = setting->Hand_Pose_Damping_weight_For_BigRotate;
-			}
-
-			if (i == 4 || i == 5 || i == 8 || i == 11 ||
-				i == 13 || i == 14 || i == 17 || i == 20 ||
-				i == 22 || i == 23 || i == 26 || i == 29 ||
-				i == 31 || i == 32 || i == 35 || i == 38 ||
-				i == 40 || i == 41 || i == 43 || i == 46)
-			{
-				int index = NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSITION_PARAMS + i;
-
-				D(index, index) = setting->Hand_Pose_Damping_weight_For_SmallRotate;
-			}
+			D(index, index) = setting->Hand_Pose_Damping_weight_For_BigRotate;
 		}
-		linear_system.lhs.block(0,0,
-			NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS,
-			NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS) += D;
+
+		if (i == 4 || i == 5 || i == 8 || i == 11 ||
+			i == 13 || i == 14 || i == 17 || i == 20 ||
+			i == 22 || i == 23 || i == 26 || i == 29 ||
+			i == 31 || i == 32 || i == 35 || i == 38 ||
+			i == 40 || i == 41 || i == 43 || i == 46)
+		{
+			int index = NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSITION_PARAMS + i;
+
+			D(index, index) = setting->Hand_Pose_Damping_weight_For_SmallRotate;
+		}
 	}
+	linear_system.lhs += D;
+}
 
-	//再弄物体的
-	{
-		Eigen::MatrixXf D = Eigen::MatrixXf::Identity(NUM_OBJECT_PARAMS, NUM_OBJECT_PARAMS);
+void Worker::Object_Damping(LinearSystem& linear_system)
+{
+	Eigen::MatrixXf D = Eigen::MatrixXf::Identity(NUM_OBJECT_PARAMS, NUM_OBJECT_PARAMS);
 
-		D(0, 0) = setting->Object_Trans_Damping;
-		D(1, 1) = setting->Object_Trans_Damping;
-		D(2, 2) = setting->Object_Trans_Damping;
+	D(0, 0) = setting->Object_Trans_Damping;
+	D(1, 1) = setting->Object_Trans_Damping;
+	D(2, 2) = setting->Object_Trans_Damping;
 
-		D(3, 3) = setting->Object_Rotate_Damping;
-		D(4, 4) = setting->Object_Rotate_Damping;
-		D(5, 5) = setting->Object_Rotate_Damping;
+	D(3, 3) = setting->Object_Rotate_Damping;
+	D(4, 4) = setting->Object_Rotate_Damping;
+	D(5, 5) = setting->Object_Rotate_Damping;
 
-linear_system.lhs.block(NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS,
-	NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS,
-	NUM_OBJECT_PARAMS, NUM_OBJECT_PARAMS) += D;
-	}
+	linear_system.lhs += D;
 }
 
 Eigen::VectorXf Worker::Solver(LinearSystem& linear_system)
@@ -980,7 +984,8 @@ void Worker::Evaluation()
 	int cols = mCamera->width();
 
 	//先通过人手和物体的生成的深度图合成一个总体的深度图，根据深度前后关系进行合并
-	mInteracted_Object->GenerateDepthAndSilhouette();
+	for(int obj_idx = 0;obj_idx<mInteracted_Objects.size();++obj_idx)
+		mInteracted_Objects[obj_idx]->GenerateDepthAndSilhouette();
 	mHandModel->GenerateDepthMap();
 
 	mRendered_Images.setToZero();
@@ -989,66 +994,71 @@ void Worker::Evaluation()
 	{
 		for (int col = 0; col < cols; ++col)
 		{
-			if (mInteracted_Object->generatedSilhouette.at<uchar>(row, col) == 255
-				&& mHandModel->HandModel_binaryMap.at<uchar>(row, col) != 255)
+			bool is_object = false;
+			for (int obj_idx = 0; obj_idx < mInteracted_Objects.size(); ++obj_idx)
+				is_object |= (mInteracted_Objects[obj_idx]->generatedSilhouette.at<uchar>(row, col) == 255);
+			
+			bool is_hand = (mHandModel->HandModel_binaryMap.at<uchar>(row, col) == 255);
+			bool is_origin = (mImage_InputData->silhouette.at<uchar>(row, col) == 255);
+
+			if (is_hand || is_object||is_origin)
 			{
-				mRendered_Images.total_silhouette.at<uchar>(row, col) = 255;
-				mRendered_Images.total_depth.at<ushort>(row, col) = mInteracted_Object->generatedDepth.at<ushort>(row, col);
-
-				count++;
-				float tmp_error = abs(mRendered_Images.total_depth.at<ushort>(row, col) - mImage_InputData->depth.at<ushort>(row, col));
-				errors += tmp_error > MaxThreshold ? MaxThreshold : tmp_error;
-			}
-
-			if (mInteracted_Object->generatedSilhouette.at<uchar>(row, col) != 255
-				&& mHandModel->HandModel_binaryMap.at<uchar>(row, col) == 255)
-			{
-				mRendered_Images.total_silhouette.at<uchar>(row, col) = 255;
-				mRendered_Images.total_depth.at<ushort>(row, col) = mHandModel->HandModel_depthMap.at<ushort>(row, col);
-
-				count++;
-				float tmp_error = abs(mRendered_Images.total_depth.at<ushort>(row, col) - mImage_InputData->depth.at<ushort>(row, col));
-				errors += tmp_error > MaxThreshold ? MaxThreshold : tmp_error;
-			}
-
-			if (mInteracted_Object->generatedSilhouette.at<uchar>(row, col) == 255
-				&& mHandModel->HandModel_binaryMap.at<uchar>(row, col) == 255)
-			{
-				mRendered_Images.total_silhouette.at<uchar>(row, col) = 255;
-				ushort Object_depth = mInteracted_Object->generatedDepth.at<ushort>(row, col);
-				ushort Hand_depth = mHandModel->HandModel_depthMap.at<ushort>(row, col);
-
-				if (Object_depth > Hand_depth)
+				ushort min_obj_depth = 10000;
+				for (int obj_idx = 0; obj_idx < mInteracted_Objects.size(); ++obj_idx)
 				{
-					mRendered_Images.total_depth.at<ushort>(row, col) = Hand_depth;
-					mInteracted_Object->generatedSilhouette.at<uchar>(row, col) = 0;
+					ushort obj_depth = mInteracted_Objects[obj_idx]->generatedDepth.at<ushort>(row, col);
+					if (obj_depth != 0 && obj_depth < min_obj_depth)
+						min_obj_depth = mInteracted_Objects[obj_idx]->generatedDepth.at<ushort>(row, col);
 				}
-				else
+				ushort hand_depth = mHandModel->HandModel_depthMap.at<ushort>(row, col);
+				ushort origin_depth = mImage_InputData->depth.at<ushort>(row, col);
+
+				if (is_hand && !is_object)
 				{
-					mRendered_Images.total_depth.at<ushort>(row, col) = Object_depth;
-					mHandModel->HandModel_binaryMap.at<uchar>(row, col) = 0;
+					mRendered_Images.rendered_hand_silhouette.at<uchar>(row, col) = 255;
+					mRendered_Images.rendered_hand_depth.at<ushort>(row, col) = hand_depth;
+
+					count++;
+					errors += abs(hand_depth - origin_depth) > MaxThreshold ? MaxThreshold : abs(hand_depth - origin_depth);
 				}
 
-				count++;
-				float tmp_error = abs(mRendered_Images.total_depth.at<ushort>(row, col) - mImage_InputData->depth.at<ushort>(row, col));
-				errors += tmp_error > MaxThreshold ? MaxThreshold : tmp_error;
-			}
+				if (!is_hand && is_object)
+				{
+					mRendered_Images.rendered_object_silhouette.at<uchar>(row, col) = 255;
+					mRendered_Images.rendered_object_depth.at<ushort>(row, col) = min_obj_depth;
 
-			if (mInteracted_Object->generatedSilhouette.at<uchar>(row, col) != 255 &&
-				mHandModel->HandModel_binaryMap.at<uchar>(row, col) != 255 &&
-				mImage_InputData->silhouette.at<uchar>(row, col) == 255)
-			{
-				count++;
-				float tmp_error = abs(0 - mImage_InputData->depth.at<ushort>(row, col));
-				errors += tmp_error > MaxThreshold ? MaxThreshold : tmp_error;
+					count++;
+					errors += abs(min_obj_depth - origin_depth) > MaxThreshold ? MaxThreshold : abs(min_obj_depth - origin_depth);
+				}
+
+				if (is_hand && is_object)
+				{
+					if (min_obj_depth < hand_depth)
+					{
+						mRendered_Images.rendered_object_silhouette.at<uchar>(row, col) = 255;
+						mRendered_Images.rendered_object_depth.at<ushort>(row, col) = min_obj_depth;
+
+						count++;
+						errors += abs(min_obj_depth - origin_depth) > MaxThreshold ? MaxThreshold : abs(min_obj_depth - origin_depth);
+					}
+					else
+					{
+						mRendered_Images.rendered_hand_silhouette.at<uchar>(row, col) = 255;
+						mRendered_Images.rendered_hand_depth.at<ushort>(row, col) = hand_depth;
+
+						count++;
+						errors += abs(hand_depth - origin_depth) > MaxThreshold ? MaxThreshold : abs(hand_depth - origin_depth);
+					}
+				}
+
+				if (!is_hand && !is_object)
+				{
+					count++;
+					errors += origin_depth > MaxThreshold ? MaxThreshold : origin_depth;
+				}
 			}
 		}
 	}
-
-	mInteracted_Object->generatedDepth.copyTo(mRendered_Images.rendered_object_depth);
-	mInteracted_Object->generatedSilhouette.copyTo(mRendered_Images.rendered_object_silhouette);
-	mHandModel->HandModel_binaryMap.copyTo(mRendered_Images.rendered_hand_silhouette);
-	mHandModel->HandModel_depthMap.copyTo(mRendered_Images.rendered_hand_depth);
 
 	if (count <= 0)
 		tracking_success = false;

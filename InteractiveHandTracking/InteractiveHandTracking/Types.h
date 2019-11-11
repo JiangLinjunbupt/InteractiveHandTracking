@@ -15,6 +15,8 @@
 #include<string>
 #include<chrono>
 
+#include"LogUtils.h"
+
 using namespace std;
 using namespace std::chrono;
 
@@ -114,30 +116,73 @@ struct Control {
 
 struct Object_input
 {
-	bool is_found;
+	const int LOSS_DETECT_THRESHOLD = 20;
+
 	pcl::PointCloud<pcl::PointNormal> pointcloud;
-	pcl::PointCloud<pcl::Normal> normal;
 	cv::Mat silhouette;
 	cv::Mat depth;
 	Vector3 center;
 
+	int not_detect_count;
+	bool now_detect;
+	bool pre_detect;
+	bool first_detect;
+	bool loss_detect;
+
 	void Init(const int W, const int H)
 	{
-		is_found = false;
 		silhouette = cv::Mat(cv::Size(W, H), CV_8UC1, cv::Scalar(0));
 		depth = cv::Mat(cv::Size(W, H), CV_16UC1, cv::Scalar(0));
 		center = Vector3::Zero();
 		pointcloud.points.clear();
 		pointcloud.points.reserve(W*H);
+
+		not_detect_count = 0;
+		now_detect = false;
+		pre_detect = false;
+		first_detect = false;
+		loss_detect = true;
 	}
 
 	void operator=(const Object_input& obj_input)
 	{
-		is_found = obj_input.is_found;
 		pointcloud.points.assign(obj_input.pointcloud.points.begin(), obj_input.pointcloud.points.end());
 		silhouette = obj_input.silhouette.clone();
 		depth = obj_input.depth.clone();
 		center = obj_input.center;
+
+		not_detect_count = obj_input.not_detect_count;
+		now_detect = obj_input.now_detect;
+		pre_detect = obj_input.pre_detect;
+		first_detect = obj_input.first_detect;
+		loss_detect = obj_input.loss_detect;
+	}
+
+	void UpdateStatus(bool is_detect)
+	{
+		if (is_detect)
+		{
+			not_detect_count = 0;
+			pre_detect = now_detect;
+			now_detect = true;
+
+			if (loss_detect)
+				first_detect = (!pre_detect)&now_detect;
+			else
+				first_detect = false;
+
+			loss_detect = false;
+		}
+		else
+		{
+			not_detect_count++;
+			pre_detect = now_detect;
+			now_detect = false;
+
+			if (not_detect_count > LOSS_DETECT_THRESHOLD)
+				loss_detect = true;
+			first_detect = false;
+		}
 	}
 };
 
@@ -153,9 +198,9 @@ struct Image_InputData
 	int *idxs_image;
 
 	Object_input hand;
-	Object_input item;
+	vector<Object_input> item;
 
-	void Init(const int W, const int H)
+	void Init(const int W, const int H,int object_num)
 	{
 		width = W;
 		height = H;
@@ -166,7 +211,13 @@ struct Image_InputData
 
 		idxs_image = new int[W*H]();
 		hand.Init(W, H);
-		item.Init(W, H);
+
+		for (int obj_id = 0; obj_id < object_num; ++obj_id)
+		{
+			Object_input tmpObject;
+			tmpObject.Init(W, H);
+			item.emplace_back(tmpObject);
+		}
 	}
 
 	void operator=(const Image_InputData& image_input)
@@ -179,7 +230,9 @@ struct Image_InputData
 		silhouette = image_input.silhouette.clone();
 
 		hand = image_input.hand;
-		item = image_input.item;
+
+		for (size_t obj_id = 0; obj_id < image_input.item.size(); ++obj_id)
+			item[obj_id] = image_input.item[obj_id];
 
 		std::copy(image_input.idxs_image, image_input.idxs_image + width * height, idxs_image);
 	}
@@ -188,12 +241,11 @@ struct Image_InputData
 struct Glove_InputData
 {
 	VectorN params;
-	VectorN shapeparams;
-
+	VectorN pre_params;
 	void Init()
 	{
 		params = VectorN::Zero(NUM_HAND_POSE_PARAMS);
-		shapeparams = VectorN::Zero(NUM_HAND_SHAPE_PARAMS);
+		pre_params = VectorN::Zero(NUM_HAND_POSE_PARAMS);
 	}
 };
 
@@ -202,9 +254,9 @@ struct InputData
 	Image_InputData image_data;
 	Glove_InputData glove_data;
 
-	void Init(const int W, const int H)
+	void Init(const int W, const int H,int object_num)
 	{
-		image_data.Init(W, H);
+		image_data.Init(W, H, object_num);
 		glove_data.Init();
 	}
 };
@@ -212,9 +264,6 @@ struct InputData
 
 struct Rendered_Images
 {
-	cv::Mat total_silhouette;
-	cv::Mat total_depth;
-
 	cv::Mat rendered_object_silhouette;
 	cv::Mat rendered_object_depth;
 
@@ -223,35 +272,28 @@ struct Rendered_Images
 
 	void init(int w, int h)
 	{
-		total_silhouette = cv::Mat(cv::Size(w, h), CV_8UC1, cv::Scalar(0));
 		rendered_object_silhouette = cv::Mat(cv::Size(w, h), CV_8UC1, cv::Scalar(0));
 		rendered_hand_silhouette = cv::Mat(cv::Size(w, h), CV_8UC1, cv::Scalar(0));
 
-		total_depth = cv::Mat(cv::Size(w, h), CV_16UC1, cv::Scalar(0));
 		rendered_object_depth = cv::Mat(cv::Size(w, h), CV_16UC1, cv::Scalar(0));
 		rendered_hand_depth = cv::Mat(cv::Size(w, h), CV_16UC1, cv::Scalar(0));
 	}
 
 	void setToZero()
 	{
-		total_silhouette.setTo(0);
 		rendered_object_silhouette.setTo(0);
 		rendered_hand_silhouette.setTo(0);
 
-		total_depth.setTo(0);
 		rendered_object_depth.setTo(0);
 		rendered_hand_depth.setTo(0);
 	}
 
 	void operator=(Rendered_Images& rendered_images)
 	{
-		rendered_images.total_silhouette.copyTo(total_silhouette);
-		rendered_images.total_depth.copyTo(total_depth);
+		rendered_hand_silhouette = rendered_images.rendered_hand_silhouette.clone();
+		rendered_hand_depth = rendered_images.rendered_hand_depth.clone();
 
-		rendered_images.rendered_hand_silhouette.copyTo(rendered_hand_silhouette);
-		rendered_images.rendered_hand_depth.copyTo(rendered_hand_depth);
-
-		rendered_images.rendered_object_depth.copyTo(rendered_object_depth);
-		rendered_images.rendered_object_silhouette.copyTo(rendered_object_silhouette);
+		rendered_object_depth = rendered_images.rendered_object_depth.clone();
+		rendered_object_silhouette = rendered_images.rendered_object_silhouette.clone();
 	}
 };

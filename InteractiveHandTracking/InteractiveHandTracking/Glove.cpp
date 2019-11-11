@@ -4,6 +4,8 @@ void Glove::fetch_RealTime_Data(InputData& inputdata)
 {
 	if (mSharedMemeryPtr != nullptr)
 	{
+		inputdata.glove_data.pre_params = inputdata.glove_data.params;
+
 		Eigen::VectorXf Rotate_pos = Eigen::VectorXf::Zero(NUM_HAND_WRIST_PARAMS + NUM_HAND_FINGER_PARAMS);
 
 		for (int i = 0; i < (NUM_HAND_WRIST_PARAMS + NUM_HAND_FINGER_PARAMS); ++i)
@@ -16,6 +18,8 @@ void Glove::fetch_RealTime_Data(InputData& inputdata)
 	}
 	else
 	{
+		inputdata.glove_data.pre_params = inputdata.glove_data.params;
+
 		inputdata.glove_data.params.setZero();
 		inputdata.glove_data.params.head(3) = inputdata.image_data.hand.center;
 	}

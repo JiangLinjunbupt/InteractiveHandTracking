@@ -9,7 +9,7 @@ struct GlobalSetting
 	int maxPixelNUM;
 	float* sharedMeneryPtr = NULL;
 
-	Object_type object_type;
+	vector<Object_type> object_type;
 };
 
 class TrackingManager
@@ -17,18 +17,19 @@ class TrackingManager
 public:
 	InputManager* mInputManager;
 	SolverManager* mSolverManager;
-	Interacted_Object* mInteracted_Object;
+	vector<Interacted_Object*> mInteracted_Object;
 	HandModel* mHandModel;
 	Camera* mCamera;
 
-	Eigen::VectorXf mPreviousOptimizedParams;
+	Eigen::VectorXf pre_HandParams;
+	vector<Eigen::VectorXf> pre_ObjParams;
 	RuntimeType mRuntimeType;
 
 private:
 	bool is_success = false;
 	Rendered_Images mRendered_Images;
 public:
-	TrackingManager(const GlobalSetting& setting);
+	TrackingManager(GlobalSetting& setting);
 	void Tracking(bool do_tracking);
 
 	void ShowInputColorImage();
@@ -39,8 +40,8 @@ public:
 
 private:
 	bool FetchInput();
-	void GeneratedStartPoints(vector<Eigen::VectorXf>& start_points);
-	void ApplyOptimizedParams(const Eigen::VectorXf& params);
+	void GeneratedStartPoints(vector<Eigen::VectorXf>& hand_init, vector<vector<Eigen::VectorXf>>& obj_init);
+	void ApplyOptimizedParams();
 	void ApplyInputParams();
 };
 

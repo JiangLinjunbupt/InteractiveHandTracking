@@ -13,7 +13,7 @@ private:
 	Glove* mGlove = nullptr;
 	RuntimeType mRuntimeType;
 public:
-	InputManager(RuntimeType type, float* sharedMemeryPtr = nullptr, int maxPixelNUM = 192, Object_type object_type = yellowSphere);
+	InputManager(RuntimeType type, vector<Object_type>& object_type, float* sharedMemeryPtr = nullptr, int maxPixelNUM = 192);
 	bool fetchInputData();
 	RuntimeType getRuntimeType() {
 		return mRuntimeType;

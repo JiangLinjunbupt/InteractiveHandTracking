@@ -101,6 +101,7 @@
     <ClInclude Include="InputManager.h" />
     <ClInclude Include="Interacted_Object.h" />
     <ClInclude Include="Kalman.h" />
+    <ClInclude Include="LogUtils.h" />
     <ClInclude Include="OpenGL_Display.h" />
     <ClInclude Include="RealSenseSR300.h" />
     <ClInclude Include="SolverManager.h" />

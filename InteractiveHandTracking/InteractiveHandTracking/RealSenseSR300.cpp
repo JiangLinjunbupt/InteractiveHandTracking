@@ -81,12 +81,12 @@ auto soil = Soil<float, float, unsigned int, Result_Types::probabilities>();
 auto forest = soil.ForestFromFile("E:\\githubProject\\hand-seg-rdf\\examples\\c++\\ff_handsegmentation.ff");
 
 
-RealSenseSensor::RealSenseSensor(Camera* _camera, int maxPixelNUM, Object_type object_type)
+RealSenseSensor::RealSenseSensor(Camera* _camera, int maxPixelNUM, vector<Object_type>& object_type)
 {
 	camera = _camera;
 	initialized = false;
 	MaxPixelNUM = maxPixelNUM;
-	mObject_type = object_type;
+	mObject_type.assign(object_type.begin(), object_type.end());
 
 	distance_transform.init(_camera->width(), _camera->height());
 }
@@ -102,8 +102,8 @@ bool RealSenseSensor::initialize()
 	if (!initialized)
 	{
 		currentFrame_idx = 0;
-		m_Image_InputData[FRONT_BUFFER].Init(camera->width(), camera->height());
-		m_Image_InputData[BACK_BUFFER].Init(camera->width(), camera->height());
+		m_Image_InputData[FRONT_BUFFER].Init(camera->width(), camera->height(),mObject_type.size());
+		m_Image_InputData[BACK_BUFFER].Init(camera->width(), camera->height(), mObject_type.size());
 	}
 
 	sensor_thread_realsense = std::thread(&RealSenseSensor::run, this);
@@ -211,32 +211,34 @@ bool RealSenseSensor::run()
 				if (outputData) {
 					outputData->Update();
 					PXCHandData::ExtremityData RightPalmCenter; //记得中心点的2D坐标要的xy要除以2；
+					MaskFromRealSense.setTo(0);
 					bool is_GetHandSegFromRealSense = GetHandSegFromRealSense(MaskFromRealSense, Handsample->depth, outputData, RightPalmCenter);
 					bool is_GetDepthAndColor = GetColorAndDepthImage(sensor_depth, sensor_color, projection, Imagesample->depth, Imagesample->color);
 					
 					if (is_GetDepthAndColor) {
-						cv::Mat objecMask = cv::Mat(cv::Size(D_width / downsampling_factor, D_height / downsampling_factor), CV_8UC1, cv::Scalar(0));
-						cv::Mat handMask = cv::Mat(cv::Size(D_width / downsampling_factor, D_height / downsampling_factor), CV_8UC1, cv::Scalar(0));
-						std::pair<bool, bool> segResult;
-						segResult = SegObjectAndHand(MaskFromRealSense, sensor_color, sensor_depth, is_GetHandSegFromRealSense, objecMask, handMask);
+						SegObjectAndHand(MaskFromRealSense, sensor_color, sensor_depth, is_GetHandSegFromRealSense);
 
 						//给乒乓缓存赋值
 						cv::flip(sensor_depth, m_Image_InputData[BACK_BUFFER].depth, -1);
 						cv::flip(sensor_color, m_Image_InputData[BACK_BUFFER].color, -1);
 
-						cv::flip(objecMask, m_Image_InputData[BACK_BUFFER].item.silhouette, -1);
-						cv::flip(handMask, m_Image_InputData[BACK_BUFFER].hand.silhouette, -1);
+						for (int obj_id = 0; obj_id < mObject_type.size(); ++obj_id)
+							cv::flip(m_Image_InputData[BACK_BUFFER].item[obj_id].silhouette, m_Image_InputData[BACK_BUFFER].item[obj_id].silhouette, -1);
+						cv::flip(m_Image_InputData[BACK_BUFFER].hand.silhouette, m_Image_InputData[BACK_BUFFER].hand.silhouette, -1);
 
-						m_Image_InputData[BACK_BUFFER].silhouette = m_Image_InputData[BACK_BUFFER].item.silhouette.clone();
-						m_Image_InputData[BACK_BUFFER].silhouette.setTo(255, m_Image_InputData[BACK_BUFFER].hand.silhouette == 255);
+						m_Image_InputData[BACK_BUFFER].silhouette = m_Image_InputData[BACK_BUFFER].hand.silhouette.clone();
+						for (int obj_id = 0; obj_id < mObject_type.size(); ++obj_id)
+							m_Image_InputData[BACK_BUFFER].silhouette.setTo(255, m_Image_InputData[BACK_BUFFER].item[obj_id].silhouette == 255);
 
-						m_Image_InputData[BACK_BUFFER].item.is_found = segResult.first;
-						m_Image_InputData[BACK_BUFFER].item.depth = m_Image_InputData[BACK_BUFFER].depth.clone();
-						m_Image_InputData[BACK_BUFFER].item.depth.setTo(0, m_Image_InputData[BACK_BUFFER].item.silhouette == 0);
+						for (int obj_id = 0; obj_id < mObject_type.size(); ++obj_id)
+						{
+							m_Image_InputData[BACK_BUFFER].item[obj_id].depth = m_Image_InputData[BACK_BUFFER].depth.clone();
+							m_Image_InputData[BACK_BUFFER].item[obj_id].depth.setTo(0, m_Image_InputData[BACK_BUFFER].item[obj_id].silhouette == 0);
+						}
 
-						m_Image_InputData[BACK_BUFFER].hand.is_found = segResult.second;
 						m_Image_InputData[BACK_BUFFER].hand.depth = m_Image_InputData[BACK_BUFFER].depth.clone();
 						m_Image_InputData[BACK_BUFFER].hand.depth.setTo(0, m_Image_InputData[BACK_BUFFER].hand.silhouette == 0);
+
 
 						//点云转换
 						DepthToPointCloud(m_Image_InputData[BACK_BUFFER]);
@@ -388,47 +390,53 @@ bool RealSenseSensor::GetColorAndDepthImage(cv::Mat& depthImg, cv::Mat& colorImg
 	return is_getColorAndDepth;
 }
 
-bool RealSenseSensor::SegObject(cv::Mat& depth, cv::Mat& hsv, cv::Mat& objectMask)
+void RealSenseSensor::SegObject(cv::Mat& depth, cv::Mat& hsv)
 {
 	int object_hmin, object_hmax;
 	int object_smin, object_smax;
 	int object_vmin, object_vmax;
 
-	//黄色的小球的阈值
-	switch (mObject_type)
-	{
-	case yellowSphere:
-		object_hmin = 40; object_smin = 110; object_vmin = 0;
-		object_hmax = 100; object_smax = 255; object_vmax = 255;
-		break;
-	case redCube:
-		object_hmin = 300; object_smin = 110; object_vmin = 80;
-		object_hmax = 360; object_smax = 255; object_vmax = 255;
-		break;
-	default:
-		object_hmin = 0; object_smin = 0; object_vmin = 0;
-		object_hmax = 360; object_smax = 255; object_vmax = 255;
-		break;
-	}
-
 	int s_Max = 255;
 	int v_Max = 255;
 
-	cv::inRange(hsv,
-		cv::Scalar(object_hmin, object_smin / float(s_Max), object_vmin / float(v_Max)),
-		cv::Scalar(object_hmax, object_smax / float(s_Max), object_vmax / float(v_Max)),
-		objectMask);
+	int width = camera->width();
+	int height = camera->height();
+	for (size_t obj_id = 0; obj_id < mObject_type.size(); ++obj_id)
+	{
+		//黄色的小球的阈值
+		switch (mObject_type[obj_id])
+		{
+		case yellowSphere:
+			object_hmin = 40; object_smin = 100; object_vmin = 0;
+			object_hmax = 100; object_smax = 255; object_vmax = 255;
+			break;
+		case redCube:
+			object_hmin = 300; object_smin = 110; object_vmin = 80;
+			object_hmax = 360; object_smax = 255; object_vmax = 255;
+			break;
+		default:
+			object_hmin = 0; object_smin = 0; object_vmin = 0;
+			object_hmax = 360; object_smax = 255; object_vmax = 255;
+			break;
+		}
 
-	////经过一次形态学腐蚀膨胀，去除空洞
-	//int Object_DILATION_SIZE = 1;
-	//cv::Mat element = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(2 * Object_DILATION_SIZE + 1, 2 * Object_DILATION_SIZE + 1));
-	//cv::dilate(objectMask, objectMask, element);
+		cv::inRange(hsv,
+			cv::Scalar(object_hmin, object_smin / float(s_Max), object_vmin / float(v_Max)),
+			cv::Scalar(object_hmax, object_smax / float(s_Max), object_vmax / float(v_Max)),
+			m_Image_InputData[BACK_BUFFER].item[obj_id].silhouette);
+		////经过一次形态学腐蚀膨胀，去除空洞
+		//int Object_DILATION_SIZE = 1;
+		//cv::Mat element = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(2 * Object_DILATION_SIZE + 1, 2 * Object_DILATION_SIZE + 1));
+		//cv::dilate(objectMask, objectMask, element);
 
-	if (cv::countNonZero(objectMask) > 30) return true;
-	else return false;
+		if (cv::countNonZero(m_Image_InputData[BACK_BUFFER].item[obj_id].silhouette) > 30)
+			m_Image_InputData[BACK_BUFFER].item[obj_id].UpdateStatus(true);
+		else
+			m_Image_InputData[BACK_BUFFER].item[obj_id].UpdateStatus(false);
+	}
 }
 
-bool RealSenseSensor::SegHand(cv::Mat& depth, cv::Mat& hsv, cv::Mat& HandSegFromRealSense, bool is_handSegFromRealsense, cv::Mat& handMask)
+void RealSenseSensor::SegHand(cv::Mat& depth, cv::Mat& hsv, cv::Mat& HandSegFromRealSense, bool is_handSegFromRealsense)
 {
 	int background_hmin = 0, background_smin = 0, background_vmin = 0;
 	int background_hmax = 360, background_smax = 255, background_vmax = 5;
@@ -484,7 +492,8 @@ bool RealSenseSensor::SegHand(cv::Mat& depth, cv::Mat& hsv, cv::Mat& HandSegFrom
 	if (n_samples <= 0)
 	{
 		cout << "深度值小与GET_CLOSER_TO_SENSOR的像素点为零 -----> continue..." << endl;
-		return false;
+		m_Image_InputData[BACK_BUFFER].hand.UpdateStatus(false);
+		return;
 	}
 
 	// allocat memory for new data
@@ -543,7 +552,8 @@ bool RealSenseSensor::SegHand(cv::Mat& depth, cv::Mat& hsv, cv::Mat& HandSegFrom
 	if (contours.size() <= 0)
 	{
 		cout << "contours  is zero   ---->  continue.." << endl;
-		return false;
+		m_Image_InputData[BACK_BUFFER].hand.UpdateStatus(false);
+		return;
 	}
 	int idx = 0, largest_component = 0;
 	double max_area = 0;
@@ -601,7 +611,10 @@ bool RealSenseSensor::SegHand(cv::Mat& depth, cv::Mat& hsv, cv::Mat& HandSegFrom
 	contours.clear();
 	hierarchy.clear();
 	cv::findContours(pp, contours, hierarchy, CV_RETR_CCOMP, CV_CHAIN_APPROX_SIMPLE);
-	if (contours.size() <= 0) return false;
+	if (contours.size() <= 0) {
+		m_Image_InputData[BACK_BUFFER].hand.UpdateStatus(false);
+		return;
+	}
 	idx = 0, largest_component = 0;
 	max_area = 0;
 	for (; idx >= 0; idx = hierarchy[idx][0])
@@ -621,33 +634,37 @@ bool RealSenseSensor::SegHand(cv::Mat& depth, cv::Mat& hsv, cv::Mat& HandSegFrom
 
 	//最后融合来自realsense的人手分割图
 	if (is_handSegFromRealsense) mask.setTo(255, HandSegFromRealSense == 255);
-	mask.copyTo(handMask);
+	mask.copyTo(m_Image_InputData[BACK_BUFFER].hand.silhouette);
 
-	return true;
+	if (cv::countNonZero(m_Image_InputData[BACK_BUFFER].hand.silhouette) > 50)
+		m_Image_InputData[BACK_BUFFER].hand.UpdateStatus(true);
+	else
+		m_Image_InputData[BACK_BUFFER].hand.UpdateStatus(false);
 }
-std::pair<bool, bool> RealSenseSensor::SegObjectAndHand(cv::Mat& HandSegFromRealSense, cv::Mat& origin_color, cv::Mat& origin_depth, bool is_handSegFromRealsense, cv::Mat& objectMask, cv::Mat& handMask)
+void RealSenseSensor::SegObjectAndHand(cv::Mat& HandSegFromRealSense, cv::Mat& origin_color, cv::Mat& origin_depth, bool is_handSegFromRealsense)
 {
-	std::pair<bool, bool> segResult = std::pair<bool, bool>(false, false);
-
 	cv::Mat bgr;  //灰度值归一化
 	cv::Mat hsv;  //HSV图像
 	origin_color.convertTo(bgr, CV_32FC3, 1.0 / 255, 0); //彩色图像的灰度值归一化,图像大小没有变化，但是类型UINT8变为了FLOAT32位，经过这一步再转换为HSV，才是H ：0-360， S：0-1，V:0-1
 	cv::cvtColor(bgr, hsv, cv::COLOR_BGR2HSV);    //颜色空间转换
 	cv::Mat depth_for_seg = origin_depth.clone();
 
-	segResult.first = SegObject(depth_for_seg, hsv, objectMask);
+	SegObject(depth_for_seg, hsv);
 	//物体分割后，需要将物体的深度值再深度图中去掉，并且也要从realsense得到的轮廓中去除该物体
-	depth_for_seg.setTo(cv::Scalar(BACKGROUND_DEPTH), objectMask == 255);
-	if (is_handSegFromRealsense) HandSegFromRealSense.setTo(0, objectMask == 255);
+	for (size_t obj_id = 0; obj_id < mObject_type.size(); ++obj_id)
+	{
+		depth_for_seg.setTo(cv::Scalar(BACKGROUND_DEPTH), m_Image_InputData[BACK_BUFFER].item[obj_id].silhouette == 255);
+		if (is_handSegFromRealsense)
+			HandSegFromRealSense.setTo(0, m_Image_InputData[BACK_BUFFER].item[obj_id].silhouette == 255);
+	}
 	//然后再进行人手分割
-	segResult.second = SegHand(depth_for_seg, hsv, HandSegFromRealSense, is_handSegFromRealsense, handMask);
-
-	return segResult;
+	SegHand(depth_for_seg, hsv, HandSegFromRealSense, is_handSegFromRealsense);
 }
 
 void RealSenseSensor::DepthToPointCloud(Image_InputData& image_inputData)
 {
-	image_inputData.item.pointcloud.points.clear();
+	for(int obj_id = 0; obj_id<mObject_type.size();++obj_id)
+		image_inputData.item[obj_id].pointcloud.points.clear();
 	image_inputData.hand.pointcloud.points.clear();
 
 	int cols = image_inputData.depth.cols;
@@ -655,14 +672,15 @@ void RealSenseSensor::DepthToPointCloud(Image_InputData& image_inputData)
 	Vector3 v0, v1, v2, v3, v4, v5, v6, v7, v8;
 	Vector3 vn1, vn2, vn3, vn4, vn5, vn6, vn7, vn8;
 	
-	Vector3 object_center = Vector3::Zero();
-	Vector3 hand_center = Vector3::Zero();
-	int object_count = 0;
-	int hand_count = 0;
-
 	//寻找物体和人手的最小内接圆，用这个内接圆内的数据计算位置
-	float Object_InscribCircleradius = 0; Vector2 Object_InscribCirclecenter = Vector2::Zero();
-	FindInscribedCircle(image_inputData.item.silhouette, Object_InscribCircleradius, Object_InscribCirclecenter);
+	vector<float> Object_InscribCircleradius; vector<Vector2> Object_InscribCirclecenter;
+	for (int obj_id = 0; obj_id < mObject_type.size(); ++obj_id)
+	{
+		float InscribCircleradius = 0; Vector2 InscribCirclecenter = Vector2::Zero();
+		FindInscribedCircle(image_inputData.item[obj_id].silhouette, InscribCircleradius, InscribCirclecenter);
+		Object_InscribCircleradius.emplace_back(InscribCircleradius);
+		Object_InscribCirclecenter.emplace_back(InscribCirclecenter);
+	}
 	float Hand_InscribCircleradius = 0; Vector2 Hand_InscribCirclecenter = Vector2::Zero();
 	FindInscribedCircle(image_inputData.hand.silhouette, Hand_InscribCircleradius, Hand_InscribCirclecenter);
 
@@ -673,6 +691,9 @@ void RealSenseSensor::DepthToPointCloud(Image_InputData& image_inputData)
 		DownSampleRate = sqrt(NonZero / MaxPixelNUM);
 	else
 		DownSampleRate = 1;
+
+	Vector3 hand_center = Vector3::Zero();
+	int hand_count = 0;
 
 	for(int row = 1;row<rows-1;row += DownSampleRate)
 		for (int col = 1; col < cols-1; col += DownSampleRate) {
@@ -737,12 +758,23 @@ void RealSenseSensor::DepthToPointCloud(Image_InputData& image_inputData)
 	if (hand_count > 0) hand_center /= hand_count;
 	image_inputData.hand.center = hand_center;
 
-	int ObjectDownSampleRate = 2;
+	vector<Vector3> object_center;
+	vector<int> object_count;
+
+	for (int i = 0; i < mObject_type.size(); ++i)
+	{
+		object_center.emplace_back(Vector3::Zero());
+		object_count.emplace_back(0);
+	}
+	int ObjectDownSampleRate = 3;
 	for (int row = 1; row<rows - 1; row += ObjectDownSampleRate)
 		for (int col = 1; col < cols - 1; col += ObjectDownSampleRate) {
 			//对物体处理
-			if (image_inputData.item.silhouette.at<uchar>(row, col) == 255)
+			for (int obj_id = 0; obj_id < mObject_type.size(); ++obj_id)
 			{
+				if (image_inputData.item[obj_id].silhouette.at<uchar>(row, col) != 255)
+					continue;
+
 				v0 = camera->depth_to_world(col, row, image_inputData.depth.at<ushort>(row, col));
 
 				v1 = camera->depth_to_world(col - 1, row - 1, image_inputData.depth.at<ushort>(row - 1, col - 1));
@@ -785,21 +817,27 @@ void RealSenseSensor::DepthToPointCloud(Image_InputData& image_inputData)
 				p.normal_y = vn1.y();
 				p.normal_z = vn1.z();
 
-				image_inputData.item.pointcloud.points.emplace_back(p);
+				image_inputData.item[obj_id].pointcloud.points.emplace_back(p);
 
-				float distance = (row - Object_InscribCirclecenter.y())*(row - Object_InscribCirclecenter.y()) +
-					(col - Object_InscribCirclecenter.x())*(col - Object_InscribCirclecenter.x());
+				float distance = (row - Object_InscribCirclecenter[obj_id].y())*(row - Object_InscribCirclecenter[obj_id].y()) +
+					(col - Object_InscribCirclecenter[obj_id].x())*(col - Object_InscribCirclecenter[obj_id].x());
 
-				if (distance < Object_InscribCircleradius*Object_InscribCircleradius)
+				if (distance < Object_InscribCircleradius[obj_id] * Object_InscribCircleradius[obj_id])
 				{
-					object_center += v0;
-					object_count++;
+					object_center[obj_id] += v0;
+					object_count[obj_id]++;
 				}
 			}
 		}
 
-	if (object_count > 0) object_center /= object_count;
-	image_inputData.item.center = object_center;
+	for (int obj_id = 0; obj_id < mObject_type.size(); ++obj_id)
+	{
+		if (object_count[obj_id] > 0)
+		{
+			object_center[obj_id] /= object_count[obj_id];
+			image_inputData.item[obj_id].center = object_center[obj_id];
+		}
+	}
 }
 
 void RealSenseSensor::FindInscribedCircle(cv::Mat& silhouette, float& radius, Vector2& center)

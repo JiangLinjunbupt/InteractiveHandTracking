@@ -10,11 +10,11 @@ private:
 		float Object_fitting_3D = 1.0f;
 		float Object_fitting_2D = 1.0f;
 
-		float Object_Trans_Damping = 1000.0f;
-		float Object_Rotate_Damping = 100.0f;
+		float Object_Trans_Damping = 20.0f;
+		float Object_Rotate_Damping = 50.0f;
 
-		float Object_Temporal_firstOrder_weight = 2.0f;
-		float Object_Temporal_secondOrder_weight = 1.0f;
+		float Object_Temporal_firstOrder_weight = 1.0f;
+		float Object_Temporal_secondOrder_weight = 0.0f;
 
 
 		float Hand_fitting_3D = 2.0f;
@@ -48,49 +48,44 @@ private:
 
 	int itr = 0;
 	int total_itr = 0;
-	bool Has_Glove = false;;
+	bool Has_Glove = false;
 
-	std::queue<Eigen::VectorXf> temporal_Object_params;
-	std::queue<Eigen::VectorXf> temporal_finger_params;
+	vector<std::queue<Eigen::VectorXf>> temporal_Object_params;
+	std::queue<Eigen::VectorXf> temporal_Hand_params;
 
 	Image_InputData* mImage_InputData;
 	Eigen::VectorXf Glove_params;
 public:
 	HandModel* mHandModel;
-	Interacted_Object* mInteracted_Object;
-
-	Rendered_Images mRendered_Images;
-
-	Eigen::VectorXf Total_Params;
-	Eigen::VectorXf Object_params;
 	Eigen::VectorXf Hand_Params;
-
-	std::vector<DataAndCorrespond> Object_correspond;
 	std::vector<DataAndCorrespond> Hand_correspond;
-	int num_Object_matched_correspond = 0;
 	int num_Hand_matched_correspond = 0;
 
-	Worker(Interacted_Object* _interacted_Object, HandModel* _handmodel, Camera* _camera);
-	void Tracking(const Eigen::VectorXf& startData, 
-		Image_InputData& imageData, 
-		Glove_InputData& gloveData,
-		bool previous_success, 
-		const Eigen::VectorXf& previous_best_estimation);
+	vector<Interacted_Object*> mInteracted_Objects;
+	vector<Eigen::VectorXf> Object_params;
+	vector<std::vector<DataAndCorrespond>> Object_corresponds;
+	vector<int> num_Object_matched_correspond;
+	
+	Rendered_Images mRendered_Images;
+
+	Worker(Camera* _camera,vector<Object_type>& object_type);
+
+	void Tracking(Image_InputData& imageData, Glove_InputData& gloveData,
+		Eigen::VectorXf& hand_init, vector<Eigen::VectorXf>& object_init,
+		bool pre_success,
+		Eigen::VectorXf& pre_handPrams, vector<Eigen::VectorXf>& pre_objectParams);
 
 private:
-	void SetInputData(const Eigen::VectorXf& startData, 
-		Image_InputData& imageData,
-		Glove_InputData& gloveData, 
-		bool previous_success,
-		const Eigen::VectorXf& previous_best_estimation);
-	void SetTemporalInfo(bool previous_success, const Eigen::VectorXf& previous_best_estimation);
-	void One_tracking();
-	void Evaluation();
+	void SetHandInit(Eigen::VectorXf& hand_init, bool pre_success, Eigen::VectorXf& pre_handParams);
+	void SetObjectsInit(vector<Eigen::VectorXf>& object_init,bool pre_success, vector<Eigen::VectorXf>& pre_objectParams);
 
+	void SetTemporalInfo(bool pre_success,
+		Eigen::VectorXf& pre_handPrams, vector<Eigen::VectorXf>& pre_objectParams);
 
 	void FindObjectCorrespond();
 	void FindHandCorrespond();
 
+	void Hand_one_tracking();
 	float Fitting3D(LinearSystem& linear_system);
 	void Fitting2D(LinearSystem& linear_system);
 	void MaxMinLimit(LinearSystem& linear_system);
@@ -101,6 +96,16 @@ private:
 	void CollisionLimit(LinearSystem& linear_system);
 	void Damping(LinearSystem& linear_system);
 	void RigidOnly(LinearSystem& linear_system);
+
+	void Object_one_tracking(int obj_idx);
+	void Object_Fitting_3D(LinearSystem& linear_system,int obj_idx);
+	void Object_Fitting_2D(LinearSystem& linear_system, int obj_idx);
+	void Object_TemporalLimit(LinearSystem& linear_system, bool first_order, int obj_idx);
+	void Object_CollisionLimit(LinearSystem& linear_system, int obj_idx);
+	void Object_Damping(LinearSystem& linear_system);
+
+
 	Eigen::VectorXf Solver(LinearSystem& linear_system);
+	void Evaluation();
 
 };

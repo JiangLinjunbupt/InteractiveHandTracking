@@ -106,20 +106,23 @@ namespace DS
 	{
 		glDisable(GL_LIGHT0);
 		glDisable(GL_LIGHTING);
-		int size = mTrackingManager->mInputManager->mInputData.image_data.item.pointcloud.points.size();
-		if (size > 0)
+		for (size_t obj_idx = 0; obj_idx < mTrackingManager->mInputManager->mInputData.image_data.item.size(); ++obj_idx)
 		{
-			glPointSize(5);
-			glColor3f(mTrackingManager->mInteracted_Object->mObject_attribute.color(0),
-				mTrackingManager->mInteracted_Object->mObject_attribute.color(1),
-				mTrackingManager->mInteracted_Object->mObject_attribute.color(2));
-			glBegin(GL_POINTS);
-			for (int i = 0; i < size; i++) {
-				glVertex3f(mTrackingManager->mInputManager->mInputData.image_data.item.pointcloud.points[i].x,
-					mTrackingManager->mInputManager->mInputData.image_data.item.pointcloud.points[i].y,
-					mTrackingManager->mInputManager->mInputData.image_data.item.pointcloud.points[i].z);
+			int size = mTrackingManager->mInputManager->mInputData.image_data.item[obj_idx].pointcloud.points.size();
+			if (size > 0)
+			{
+				glPointSize(5);
+				glColor3f(mTrackingManager->mInteracted_Object[obj_idx]->mObject_attribute.color(0),
+					mTrackingManager->mInteracted_Object[obj_idx]->mObject_attribute.color(1),
+					mTrackingManager->mInteracted_Object[obj_idx]->mObject_attribute.color(2));
+				glBegin(GL_POINTS);
+				for (int i = 0; i < size; i++) {
+					glVertex3f(mTrackingManager->mInputManager->mInputData.image_data.item[obj_idx].pointcloud.points[i].x,
+						mTrackingManager->mInputManager->mInputData.image_data.item[obj_idx].pointcloud.points[i].y,
+						mTrackingManager->mInputManager->mInputData.image_data.item[obj_idx].pointcloud.points[i].z);
+				}
+				glEnd();
 			}
-			glEnd();
 		}
 	}
 	void draw_HandPointCloudNormal()
@@ -148,22 +151,25 @@ namespace DS
 	{
 		glDisable(GL_LIGHT0);
 		glDisable(GL_LIGHTING);
-		int size = mTrackingManager->mInputManager->mInputData.image_data.item.pointcloud.points.size();
-		if (size > 0)
+		for (size_t obj_idx = 0; obj_idx < mTrackingManager->mInputManager->mInputData.image_data.item.size(); ++obj_idx)
 		{
-			int scale = 20;
-			glColor3f(0.0f, 0.0f, 1.0f);
-			glLineWidth(2);
-			glBegin(GL_LINES);
-			for (int i = 0; i < size; i++) {
-				glVertex3f(mTrackingManager->mInputManager->mInputData.image_data.item.pointcloud.points[i].x,
-					mTrackingManager->mInputManager->mInputData.image_data.item.pointcloud.points[i].y,
-					mTrackingManager->mInputManager->mInputData.image_data.item.pointcloud.points[i].z);
-				glVertex3f(mTrackingManager->mInputManager->mInputData.image_data.item.pointcloud.points[i].x + scale * mTrackingManager->mInputManager->mInputData.image_data.item.pointcloud.points[i].normal_x,
-					mTrackingManager->mInputManager->mInputData.image_data.item.pointcloud.points[i].y + scale * mTrackingManager->mInputManager->mInputData.image_data.item.pointcloud.points[i].normal_y,
-					mTrackingManager->mInputManager->mInputData.image_data.item.pointcloud.points[i].z + scale * mTrackingManager->mInputManager->mInputData.image_data.item.pointcloud.points[i].normal_z);
+			int size = mTrackingManager->mInputManager->mInputData.image_data.item[obj_idx].pointcloud.points.size();
+			if (size > 0)
+			{
+				int scale = 20;
+				glColor3f(0.0f, 0.0f, 1.0f);
+				glLineWidth(2);
+				glBegin(GL_LINES);
+				for (int i = 0; i < size; i++) {
+					glVertex3f(mTrackingManager->mInputManager->mInputData.image_data.item[obj_idx].pointcloud.points[i].x,
+						mTrackingManager->mInputManager->mInputData.image_data.item[obj_idx].pointcloud.points[i].y,
+						mTrackingManager->mInputManager->mInputData.image_data.item[obj_idx].pointcloud.points[i].z);
+					glVertex3f(mTrackingManager->mInputManager->mInputData.image_data.item[obj_idx].pointcloud.points[i].x + scale * mTrackingManager->mInputManager->mInputData.image_data.item[obj_idx].pointcloud.points[i].normal_x,
+						mTrackingManager->mInputManager->mInputData.image_data.item[obj_idx].pointcloud.points[i].y + scale * mTrackingManager->mInputManager->mInputData.image_data.item[obj_idx].pointcloud.points[i].normal_y,
+						mTrackingManager->mInputManager->mInputData.image_data.item[obj_idx].pointcloud.points[i].z + scale * mTrackingManager->mInputManager->mInputData.image_data.item[obj_idx].pointcloud.points[i].normal_z);
+				}
+				glEnd();
 			}
-			glEnd();
 		}
 	}
 	void draw_Coordinate()
@@ -223,48 +229,50 @@ namespace DS
 	{
 		glEnable(GL_LIGHT0);
 		glEnable(GL_LIGHTING);
-
-		GLfloat Sphere_ambient[] = { mTrackingManager->mInteracted_Object->mObject_attribute.color(0),
-			mTrackingManager->mInteracted_Object->mObject_attribute.color(1),
-			mTrackingManager->mInteracted_Object->mObject_attribute.color(2),1 };
-		GLfloat Sphere_specular[] = { 0.5, 0.5, 0.5, 1.0 };
-		GLfloat Sphere_shin[] = { 10 };
-		glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, Sphere_ambient);
-		glMaterialfv(GL_FRONT, GL_SPECULAR, Sphere_specular);
-		glMaterialfv(GL_FRONT, GL_SHININESS, Sphere_shin);
-
-		if (!mTrackingManager->mInteracted_Object->Final_Vertices.empty())
+		for (size_t obj_idx = 0; obj_idx < mTrackingManager->mInteracted_Object.size(); ++obj_idx)
 		{
-			int face_size = mTrackingManager->mInteracted_Object->Face_idx.size();
-			glBegin(GL_TRIANGLES);
-			for (size_t i = 0; i < face_size; ++i)
+			GLfloat Sphere_ambient[] = { mTrackingManager->mInteracted_Object[obj_idx]->mObject_attribute.color(0),
+				mTrackingManager->mInteracted_Object[obj_idx]->mObject_attribute.color(1),
+				mTrackingManager->mInteracted_Object[obj_idx]->mObject_attribute.color(2),1 };
+			GLfloat Sphere_specular[] = { 0.5, 0.5, 0.5, 1.0 };
+			GLfloat Sphere_shin[] = { 10 };
+			glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, Sphere_ambient);
+			glMaterialfv(GL_FRONT, GL_SPECULAR, Sphere_specular);
+			glMaterialfv(GL_FRONT, GL_SHININESS, Sphere_shin);
+
+			if (!mTrackingManager->mInteracted_Object[obj_idx]->Final_Vertices.empty())
 			{
-				int idx_1 = mTrackingManager->mInteracted_Object->Face_idx[i](0);
-				int idx_2 = mTrackingManager->mInteracted_Object->Face_idx[i](1);
-				int idx_3 = mTrackingManager->mInteracted_Object->Face_idx[i](2);
+				int face_size = mTrackingManager->mInteracted_Object[obj_idx]->Face_idx.size();
+				glBegin(GL_TRIANGLES);
+				for (size_t i = 0; i < face_size; ++i)
+				{
+					int idx_1 = mTrackingManager->mInteracted_Object[obj_idx]->Face_idx[i](0);
+					int idx_2 = mTrackingManager->mInteracted_Object[obj_idx]->Face_idx[i](1);
+					int idx_3 = mTrackingManager->mInteracted_Object[obj_idx]->Face_idx[i](2);
 
-				glNormal3f(mTrackingManager->mInteracted_Object->Final_Normal[idx_1](0),
-					mTrackingManager->mInteracted_Object->Final_Normal[idx_1](1),
-					mTrackingManager->mInteracted_Object->Final_Normal[idx_1](2));
-				glVertex3f(mTrackingManager->mInteracted_Object->Final_Vertices[idx_1](0),
-					mTrackingManager->mInteracted_Object->Final_Vertices[idx_1](1),
-					mTrackingManager->mInteracted_Object->Final_Vertices[idx_1](2));
+					glNormal3f(mTrackingManager->mInteracted_Object[obj_idx]->Final_Normal[idx_1](0),
+						mTrackingManager->mInteracted_Object[obj_idx]->Final_Normal[idx_1](1),
+						mTrackingManager->mInteracted_Object[obj_idx]->Final_Normal[idx_1](2));
+					glVertex3f(mTrackingManager->mInteracted_Object[obj_idx]->Final_Vertices[idx_1](0),
+						mTrackingManager->mInteracted_Object[obj_idx]->Final_Vertices[idx_1](1),
+						mTrackingManager->mInteracted_Object[obj_idx]->Final_Vertices[idx_1](2));
 
-				glNormal3f(mTrackingManager->mInteracted_Object->Final_Normal[idx_2](0),
-					mTrackingManager->mInteracted_Object->Final_Normal[idx_2](1),
-					mTrackingManager->mInteracted_Object->Final_Normal[idx_2](2));
-				glVertex3f(mTrackingManager->mInteracted_Object->Final_Vertices[idx_2](0),
-					mTrackingManager->mInteracted_Object->Final_Vertices[idx_2](1),
-					mTrackingManager->mInteracted_Object->Final_Vertices[idx_2](2));
+					glNormal3f(mTrackingManager->mInteracted_Object[obj_idx]->Final_Normal[idx_2](0),
+						mTrackingManager->mInteracted_Object[obj_idx]->Final_Normal[idx_2](1),
+						mTrackingManager->mInteracted_Object[obj_idx]->Final_Normal[idx_2](2));
+					glVertex3f(mTrackingManager->mInteracted_Object[obj_idx]->Final_Vertices[idx_2](0),
+						mTrackingManager->mInteracted_Object[obj_idx]->Final_Vertices[idx_2](1),
+						mTrackingManager->mInteracted_Object[obj_idx]->Final_Vertices[idx_2](2));
 
-				glNormal3f(mTrackingManager->mInteracted_Object->Final_Normal[idx_3](0),
-					mTrackingManager->mInteracted_Object->Final_Normal[idx_3](1),
-					mTrackingManager->mInteracted_Object->Final_Normal[idx_3](2));
-				glVertex3f(mTrackingManager->mInteracted_Object->Final_Vertices[idx_3](0),
-					mTrackingManager->mInteracted_Object->Final_Vertices[idx_3](1),
-					mTrackingManager->mInteracted_Object->Final_Vertices[idx_3](2));
+					glNormal3f(mTrackingManager->mInteracted_Object[obj_idx]->Final_Normal[idx_3](0),
+						mTrackingManager->mInteracted_Object[obj_idx]->Final_Normal[idx_3](1),
+						mTrackingManager->mInteracted_Object[obj_idx]->Final_Normal[idx_3](2));
+					glVertex3f(mTrackingManager->mInteracted_Object[obj_idx]->Final_Vertices[idx_3](0),
+						mTrackingManager->mInteracted_Object[obj_idx]->Final_Vertices[idx_3](1),
+						mTrackingManager->mInteracted_Object[obj_idx]->Final_Vertices[idx_3](2));
+				}
+				glEnd();
 			}
-			glEnd();
 		}
 	}
 	void draw_HandModel()
@@ -315,9 +323,9 @@ namespace DS
 		glMatrixMode(GL_MODELVIEW);
 		gluPerspective(180, 1.5, -1000, 1000);
 		glLoadIdentity();
-		control.gx = mTrackingManager->mInputManager->mInputData.image_data.item.center(0);
-		control.gy = mTrackingManager->mInputManager->mInputData.image_data.item.center(1);
-		control.gz = mTrackingManager->mInputManager->mInputData.image_data.item.center(2);
+		control.gx = mTrackingManager->mInputManager->mInputData.image_data.hand.center(0);
+		control.gy = mTrackingManager->mInputManager->mInputData.image_data.hand.center(1);
+		control.gz = mTrackingManager->mInputManager->mInputData.image_data.hand.center(2);
 
 		//这个值是根据palm_Center设置的，因为如果使用palm_Center的话，跳动会变得非常明显
 		if (mTrackingManager->mRuntimeType == REALTIME)
@@ -336,8 +344,9 @@ namespace DS
 
 		draw_HandModel();
 		draw_Interacted_Object();
-		//draw_HandPointCloud();
-		//draw_ObjectCloud();
+		draw_HandPointCloud();
+		draw_ObjectCloud();
+		draw_ObjectCloudNormal();
 		draw_Coordinate();
 
 		glFlush();
@@ -345,7 +354,7 @@ namespace DS
 	}
 
 	void idle() {
-		if (pause)
+		if (!pause)
 		{
 			mTrackingManager->Tracking(track);
 			mTrackingManager->ShowRenderAddColor();

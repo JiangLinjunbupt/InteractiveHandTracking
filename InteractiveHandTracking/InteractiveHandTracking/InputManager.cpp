@@ -1,13 +1,13 @@
 #include"InputManager.h"
 
-InputManager::InputManager(RuntimeType type, float* sharedMemeryPtr, int maxPixelNUM, Object_type object_type)
+InputManager::InputManager(RuntimeType type, vector<Object_type>& object_type, float* sharedMemeryPtr, int maxPixelNUM)
 {
 	mRuntimeType = type;
 	mCamera = new Camera(type);
 	mRealSenseSR300 = new RealSenseSensor(mCamera, maxPixelNUM, object_type);
 	mGlove = new Glove(sharedMemeryPtr);
 
-	mInputData.Init(mCamera->width(), mCamera->height());
+	mInputData.Init(mCamera->width(), mCamera->height(), object_type.size());
 	if (mRuntimeType == REALTIME) mRealSenseSR300->start();
 }
 
@@ -32,9 +32,13 @@ void InputManager::ShowImage_input(bool show_obj, bool show_hand, bool show_colo
 {
 	if (show_obj)
 	{
-		cv::Mat objectMask;
-		cv::flip(mInputData.image_data.item.silhouette, objectMask, 0);
-		cv::imshow("物体分割", objectMask);
+		for (int obj_id = 0; obj_id < mInputData.image_data.item.size(); ++obj_id)
+		{
+			string ss = "第 " + to_string(obj_id) + " 个物体分割结果";
+			cv::Mat objectMask;
+			cv::flip(mInputData.image_data.item[obj_id].silhouette, objectMask, 0);
+			cv::imshow(ss, objectMask);
+		}
 	}
 	
 	if (show_hand)

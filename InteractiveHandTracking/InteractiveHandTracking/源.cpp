@@ -13,14 +13,13 @@ void setSharedMemery();
 
 void main(int argc, char** argv)
 {
-
 	setSharedMemery();
 	GlobalSetting mGlobalSetting;
 	mGlobalSetting.type = REALTIME;
-	mGlobalSetting.start_points = 5;
+	mGlobalSetting.start_points = 3;
 	mGlobalSetting.maxPixelNUM = 192;
 	mGlobalSetting.sharedMeneryPtr = GetSharedMemeryPtr;
-	mGlobalSetting.object_type = redCube;
+	mGlobalSetting.object_type = { redCube,yellowSphere };
 
 
 	TrackingManager* mTrackingManager = new TrackingManager(mGlobalSetting);

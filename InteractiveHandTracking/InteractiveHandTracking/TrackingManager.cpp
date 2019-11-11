@@ -1,26 +1,34 @@
 #include"TrackingManager.h"
 
-TrackingManager::TrackingManager(const GlobalSetting& setting)
+TrackingManager::TrackingManager(GlobalSetting& setting)
 {
+	if (setting.start_points > 3)
+		setting.start_points = 3;
 	mRuntimeType = setting.type;
 	mCamera = new Camera(setting.type);
-	mInputManager = new InputManager(setting.type, setting.sharedMeneryPtr, setting.maxPixelNUM,setting.object_type);
+	mInputManager = new InputManager(setting.type, setting.object_type, setting.sharedMeneryPtr, setting.maxPixelNUM);
 	mSolverManager = new SolverManager(setting.start_points, mCamera, setting.object_type);
 
-	switch (setting.object_type)
+	for (size_t obj_id = 0; obj_id < setting.object_type.size(); ++obj_id)
 	{
-	case yellowSphere:
-		mInteracted_Object = new YellowSphere(mCamera);
-		break;
-	case redCube:
-		mInteracted_Object = new RedCube(mCamera);
-		break;
-	default:
-		break;
+		Interacted_Object* tmpObject = nullptr;
+		switch (setting.object_type[obj_id])
+		{
+		case yellowSphere:
+			tmpObject = new YellowSphere(mCamera);
+			break;
+		case redCube:
+			tmpObject = new RedCube(mCamera);
+			break;
+		default:
+			break;
+		}
+		mInteracted_Object.push_back(tmpObject);
 	}
 	mHandModel = new HandModel(mCamera);
 
-	mPreviousOptimizedParams = Eigen::VectorXf::Zero(NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS + NUM_OBJECT_PARAMS);
+	pre_ObjParams.resize(mInteracted_Object.size(), Eigen::VectorXf::Zero(NUM_OBJECT_PARAMS));
+	pre_HandParams = Eigen::VectorXf::Zero(NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS);
 	is_success = false;
 	mRendered_Images.init(mCamera->width(), mCamera->height());
 }
@@ -35,77 +43,120 @@ bool TrackingManager::FetchInput()
 	return fetch_success;
 }
 
-void TrackingManager::GeneratedStartPoints(vector<Eigen::VectorXf>& start_points)
+void TrackingManager::GeneratedStartPoints(vector<Eigen::VectorXf>& hand_init, vector<vector<Eigen::VectorXf>>& obj_init)
 {
-	//起始点1，手套+图像初始化
+	vector<Eigen::VectorXf> obj_param;
+	for (size_t obj_id = 0; obj_id < mInteracted_Object.size(); ++obj_id)
 	{
-		Eigen::VectorXf start_point1 = Eigen::VectorXf::Zero(NUM_HAND_POSE_PARAMS + NUM_OBJECT_PARAMS);
-		start_point1.head(NUM_HAND_POSE_PARAMS) = mInputManager->mInputData.glove_data.params;
-		Eigen::VectorXf Object_params = Eigen::VectorXf::Zero(NUM_OBJECT_PARAMS);
-		Object_params << mInputManager->mInputData.image_data.item.center(0),
-			mInputManager->mInputData.image_data.item.center(1),
-			mInputManager->mInputData.image_data.item.center(2), 0, 0, 0;
-		start_point1.tail(NUM_OBJECT_PARAMS) = Object_params;
-		start_points.push_back(start_point1);
+		Eigen::VectorXf tmp = Eigen::VectorXf::Zero(NUM_OBJECT_PARAMS);
+		tmp.head(3) = mInputManager->mInputData.image_data.item[obj_id].center;
+		obj_param.emplace_back(tmp);
 	}
 
-	//起始点2，上一帧的结果
+	//起始点3，手套数据的变化结合上一帧数据
 	{
-		Eigen::VectorXf start_point2 = mPreviousOptimizedParams.tail(NUM_HAND_POSE_PARAMS + NUM_OBJECT_PARAMS);
-		Eigen::VectorXf Object_params = Eigen::VectorXf::Zero(NUM_OBJECT_PARAMS);
-		Object_params << mInputManager->mInputData.image_data.item.center(0),
-			mInputManager->mInputData.image_data.item.center(1),
-			mInputManager->mInputData.image_data.item.center(2), 0, 0, 0;
-		start_point2.tail(NUM_OBJECT_PARAMS) = Object_params;
-		start_points.push_back(start_point2);
+		if (is_success)
+		{
+			Eigen::VectorXf pre_hand = pre_HandParams.tail(NUM_HAND_POSE_PARAMS);
+			Eigen::VectorXf pre_glove = mInputManager->mInputData.glove_data.pre_params;
+			Eigen::VectorXf now_glove = mInputManager->mInputData.glove_data.params;
+
+			Eigen::VectorXf hand_start3 = pre_hand;
+			//分别计算变化
+			//其余关节的主要旋转变换
+			{
+				hand_start3 += (now_glove - pre_glove);
+			}
+			//手腕的旋转变换
+			{
+				Eigen::Matrix3f R_hand = (Eigen::AngleAxisf(pre_hand(3), Eigen::Vector3f::UnitX())*
+					Eigen::AngleAxisf(pre_hand(4), Eigen::Vector3f::UnitY())*
+					Eigen::AngleAxisf(pre_hand(5), Eigen::Vector3f::UnitZ())).toRotationMatrix();
+
+				Eigen::Matrix3f R_pre_glove = (Eigen::AngleAxisf(pre_glove(3), Eigen::Vector3f::UnitX())*
+					Eigen::AngleAxisf(pre_glove(4), Eigen::Vector3f::UnitY())*
+					Eigen::AngleAxisf(pre_glove(5), Eigen::Vector3f::UnitZ())).toRotationMatrix();
+
+				Eigen::Matrix3f R_now_glove = (Eigen::AngleAxisf(now_glove(3), Eigen::Vector3f::UnitX())*
+					Eigen::AngleAxisf(now_glove(4), Eigen::Vector3f::UnitY())*
+					Eigen::AngleAxisf(now_glove(5), Eigen::Vector3f::UnitZ())).toRotationMatrix();
+
+				Eigen::VectorXf eular = (R_now_glove * R_pre_glove.inverse() * R_hand).eulerAngles(0, 1, 2);
+
+				hand_start3(3) = eular(0);
+				hand_start3(4) = eular(1);
+				hand_start3(5) = eular(2);
+			}
+			//大拇指根部的旋转变换
+			{
+				Eigen::Matrix3f R_hand = (Eigen::AngleAxisf(pre_hand(42), Eigen::Vector3f::UnitX())*
+					Eigen::AngleAxisf(pre_hand(43), Eigen::Vector3f::UnitY())*
+					Eigen::AngleAxisf(pre_hand(44), Eigen::Vector3f::UnitZ())).toRotationMatrix();
+
+				Eigen::Matrix3f R_pre_glove = (Eigen::AngleAxisf(pre_glove(42), Eigen::Vector3f::UnitX())*
+					Eigen::AngleAxisf(pre_glove(43), Eigen::Vector3f::UnitY())*
+					Eigen::AngleAxisf(pre_glove(44), Eigen::Vector3f::UnitZ())).toRotationMatrix();
+
+				Eigen::Matrix3f R_now_glove = (Eigen::AngleAxisf(now_glove(42), Eigen::Vector3f::UnitX())*
+					Eigen::AngleAxisf(now_glove(43), Eigen::Vector3f::UnitY())*
+					Eigen::AngleAxisf(now_glove(44), Eigen::Vector3f::UnitZ())).toRotationMatrix();
+
+				Eigen::VectorXf eular = (R_now_glove * R_pre_glove.inverse() * R_hand).eulerAngles(0, 1, 2);
+
+				hand_start3(42) = eular(0);
+				hand_start3(43) = eular(1);
+				hand_start3(44) = eular(2);
+			}
+			hand_start3.head(3) = pre_HandParams.head(3);
+
+			hand_init.push_back(hand_start3);
+			obj_init.push_back(obj_param);
+		}
 	}
 
-	//起始点2，上一帧的结果
+	//起始点1，手套数据 + 图像的数据
 	{
-		start_points.push_back(mPreviousOptimizedParams.tail(NUM_HAND_POSE_PARAMS + NUM_OBJECT_PARAMS));
+		hand_init.push_back(mInputManager->mInputData.glove_data.params);
+		obj_init.push_back(obj_param);
 	}
 
-
-	//起始点4,上一帧的xyz和手腕旋转 + 手指的平均数据 + 上一帧物体位置
+	//起始点2，上一帧结果 + 图像数据
 	{
-		Eigen::VectorXf start_point4 = Eigen::VectorXf::Zero(NUM_HAND_POSE_PARAMS + NUM_OBJECT_PARAMS);
-		start_point4 = mPreviousOptimizedParams.tail(NUM_HAND_POSE_PARAMS + NUM_OBJECT_PARAMS);
-		(start_point4.head(NUM_HAND_POSE_PARAMS)).tail(NUM_HAND_FINGER_PARAMS) = mHandModel->Hands_mean;
-		start_points.push_back(start_point4);
+		hand_init.push_back(pre_HandParams.tail(NUM_HAND_POSE_PARAMS));
+		obj_init.push_back(obj_param);
 	}
 
-	//起始点5，上一帧手套xyz和手套手腕 + 手指平均位置 + 上一帧物体
+	//起始点4，充数的，随便什么吧
 	{
-		Eigen::VectorXf start_point5 = Eigen::VectorXf::Zero(NUM_HAND_POSE_PARAMS + NUM_OBJECT_PARAMS);
-		start_point5 = mPreviousOptimizedParams.tail(NUM_HAND_POSE_PARAMS + NUM_OBJECT_PARAMS);
-		(start_point5.head(NUM_HAND_POSE_PARAMS)).tail(NUM_HAND_FINGER_PARAMS) = mHandModel->Hands_mean;
-		Eigen::VectorXf Object_params = Eigen::VectorXf::Zero(NUM_OBJECT_PARAMS);
-		Object_params << mInputManager->mInputData.image_data.item.center(0),
-			mInputManager->mInputData.image_data.item.center(1),
-			mInputManager->mInputData.image_data.item.center(2), 0, 0, 0;
-		start_point5.tail(NUM_OBJECT_PARAMS) = Object_params;
-		start_points.push_back(start_point5);
+		Eigen::VectorXf handparams = Eigen::VectorXf::Zero(NUM_HAND_POSE_PARAMS);
+		handparams.head(NUM_HAND_GLOBAL_PARAMS) = mInputManager->mInputData.glove_data.params.head(NUM_HAND_GLOBAL_PARAMS);
+		handparams.tail(NUM_HAND_FINGER_PARAMS) = mHandModel->Hands_mean;
+		hand_init.push_back(handparams);
+		obj_init.push_back(obj_param);
 	}
 }
-void TrackingManager::ApplyOptimizedParams(const Eigen::VectorXf& params)
+void TrackingManager::ApplyOptimizedParams()
 {
-	mHandModel->set_Shape_Params(params.head(NUM_HAND_SHAPE_PARAMS));
-	mHandModel->set_Pose_Params(params.segment(NUM_HAND_SHAPE_PARAMS, NUM_HAND_POSE_PARAMS));
+	mHandModel->set_Shape_Params(pre_HandParams.head(NUM_HAND_SHAPE_PARAMS));
+	mHandModel->set_Pose_Params(pre_HandParams.tail(NUM_HAND_POSE_PARAMS));
 	mHandModel->UpdataModel();
 
-
-	mInteracted_Object->Update(params.tail(NUM_OBJECT_PARAMS));
+	for (int obj_idx = 0; obj_idx < mInteracted_Object.size(); ++obj_idx)
+		mInteracted_Object[obj_idx]->Update(pre_ObjParams[obj_idx]);
 }
 void TrackingManager::ApplyInputParams()
 {
 	mHandModel->set_Pose_Params(mInputManager->mInputData.glove_data.params);
 	mHandModel->UpdataModel();
 
-	Eigen::VectorXf Object_params = Eigen::VectorXf::Zero(NUM_OBJECT_PARAMS);
-	Object_params << mInputManager->mInputData.image_data.item.center(0),
-		mInputManager->mInputData.image_data.item.center(1),
-		mInputManager->mInputData.image_data.item.center(2), 0, 0, 0;
-	mInteracted_Object->Update(Object_params);
+	for (int obj_idx = 0; obj_idx < mInteracted_Object.size(); ++obj_idx)
+	{
+		Eigen::VectorXf Object_params = Eigen::VectorXf::Zero(NUM_OBJECT_PARAMS);
+		Object_params << mInputManager->mInputData.image_data.item[obj_idx].center(0),
+			mInputManager->mInputData.image_data.item[obj_idx].center(1),
+			mInputManager->mInputData.image_data.item[obj_idx].center(2), 0, 0, 0;
+		mInteracted_Object[obj_idx]->Update(Object_params);
+	}
 }
 
 void TrackingManager::Tracking(bool do_tracking)
@@ -114,26 +165,26 @@ void TrackingManager::Tracking(bool do_tracking)
 	{
 		if (do_tracking)
 		{
-			vector<Eigen::VectorXf> start_points;
-			GeneratedStartPoints(start_points);
-			mSolverManager->Solve(start_points, 
-				mInputManager->mInputData.image_data, 
-				mInputManager->mInputData.glove_data,
-				is_success, 
-				mPreviousOptimizedParams);
+			vector<Eigen::VectorXf> hand_init;
+			vector<vector<Eigen::VectorXf>> obj_init;
+
+			GeneratedStartPoints(hand_init,obj_init);
+			mSolverManager->Solve(mInputManager->mInputData.image_data, mInputManager->mInputData.glove_data,
+				hand_init, obj_init,
+				is_success,
+				pre_HandParams, pre_ObjParams);
 
 			float tracking_error;
-			mSolverManager->GetBestEstimation(tracking_error, is_success, mPreviousOptimizedParams, mRendered_Images);
+			mSolverManager->GetBestEstimation(tracking_error, is_success, pre_HandParams, pre_ObjParams,mRendered_Images);
 
 			if (is_success)
 			{
 				cout << "tracking error is : " << tracking_error << endl;
-				ApplyOptimizedParams(mPreviousOptimizedParams);
+				ApplyOptimizedParams();
 				return;
 			}
 		}
 
-		mPreviousOptimizedParams.setZero();
 		ApplyInputParams();
 	}
 	else
