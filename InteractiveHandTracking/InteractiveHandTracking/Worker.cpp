@@ -4,14 +4,14 @@ Worker::Worker(Camera* _camera, vector<Object_type>& object_type)
 {
 	mCamera = _camera;
 
-	//³õÊ¼»¯ÈËÊÖÏà¹Ø
+	//ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	mHandModel = new HandModel(mCamera);
 	Hand_Params = Eigen::VectorXf::Zero(NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS);
 	mHandModel->set_Shape_Params(Hand_Params.head(NUM_HAND_SHAPE_PARAMS));
 	mHandModel->set_Pose_Params(Hand_Params.tail(NUM_HAND_POSE_PARAMS));
 	mHandModel->UpdataModel();
 
-	//³õÊ¼»¯ÎïÌåÏà¹Ø
+	//ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	for (size_t obj_id = 0; obj_id < object_type.size(); ++obj_id)
 	{
 		Interacted_Object* tmpObject = nullptr;
@@ -32,7 +32,7 @@ Worker::Worker(Camera* _camera, vector<Object_type>& object_type)
 	}
 
 
-	//³õÊ¼»¯¸ú×ÙÏà¹Ø²ÎÊý
+	//ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ø²ï¿½ï¿½ï¿½
 	kalman = new Kalman(mHandModel);
 	mRendered_Images.init(mCamera->width(), mCamera->height());
 
@@ -47,7 +47,7 @@ Worker::Worker(Camera* _camera, vector<Object_type>& object_type)
 	Object_corresponds.resize(object_type.size());
 	num_Object_matched_correspond.resize(object_type.size());
 	temporal_Object_params.resize(object_type.size());
-	//------------------ÐèÒª¼ÌÐø¿¼ÂÇ
+	//------------------ï¿½ï¿½Òªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	for(int i = 0;i<temporal_Object_params.size();++i)
 		while (!temporal_Object_params[i].empty()) temporal_Object_params[i].pop();
 	while (!temporal_Hand_params.empty()) temporal_Hand_params.pop();
@@ -58,11 +58,16 @@ void Worker::Tracking(Image_InputData& imageData, Glove_InputData& gloveData,
 	bool pre_success,
 	Eigen::VectorXf& pre_handPrams, vector<Eigen::VectorXf>& pre_objectParams)
 {
+	if (pre_success)
+		setting->max_itr = 6;
+	else
+		setting->max_itr = 15;
+
 	tracking_success = false;
 	itr = 0;
 
 	Has_Glove = true;
-	//ÉèÖÃÊäÈëÊý¾Ý£¬ÔÙÉèÖÃÄ£ÐÍÆðÊ¼µã
+	//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ý£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä£ï¿½ï¿½ï¿½ï¿½Ê¼ï¿½ï¿½
 	mImage_InputData = &imageData;
 	Glove_params = gloveData.params;
 
@@ -101,7 +106,7 @@ void Worker::SetHandInit(Eigen::VectorXf& hand_init, bool pre_success, Eigen::Ve
 }
 void Worker::SetObjectsInit(vector<Eigen::VectorXf>& object_init, bool pre_success, vector<Eigen::VectorXf>& pre_objectParams)
 {
-	//Èç¹ûÖ®Ç°¸ú×Ù³É¹¦£¬²¢ÇÒ²»ÊÇµÚÒ»´Î¼ì²âµ½¸ÃÎïÌå£¬ÔòÊ¹ÓÃÇ°Ò»Ö¡ÂÊµÄ²ÎÊý£¬·ñÔòÊ¹ÓÃ³õÊ¼»¯µÄÖ¡ÂÊ
+	//ï¿½ï¿½ï¿½Ö®Ç°ï¿½ï¿½ï¿½Ù³É¹ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ò²ï¿½ï¿½Çµï¿½Ò»ï¿½Î¼ï¿½âµ½ï¿½ï¿½ï¿½ï¿½ï¿½å£¬ï¿½ï¿½Ê¹ï¿½ï¿½Ç°Ò»Ö¡ï¿½ÊµÄ²ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê¹ï¿½Ã³ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½Ö¡ï¿½ï¿½
 	for (size_t obj_id = 0; obj_id < mInteracted_Objects.size(); ++obj_id)
 	{
 		if (pre_success && (!mImage_InputData->item[obj_id].first_detect) && mImage_InputData->item[obj_id].now_detect)
@@ -183,7 +188,7 @@ void Worker::FindObjectCorrespond()
 			}
 		}
 
-		//È»ºóÔÙÕÒ¶ÔÓ¦µã
+		//È»ï¿½ï¿½ï¿½ï¿½ï¿½Ò¶ï¿½Ó¦ï¿½ï¿½
 		int Numvisible = object_visible_cloud.size();
 		int NumPointCloud_sensor = mImage_InputData->item[obj_id].pointcloud.points.size();
 
@@ -216,7 +221,7 @@ void Worker::FindObjectCorrespond()
 
 				float distance = (p_cor - p).norm();
 
-				if (distance > 50)
+				if (distance > 100)
 					Object_corresponds[obj_id][i].is_match = false;
 				else
 					Object_corresponds[obj_id][i].is_match = true;
@@ -236,7 +241,7 @@ void Worker::FindObjectCorrespond()
 void Worker::FindHandCorrespond()
 {
 	Hand_correspond.clear();
-	//Ê×ÏÈ¼ÓÔØhandmodelÖÐµÄvisible point
+	//ï¿½ï¿½ï¿½È¼ï¿½ï¿½ï¿½handmodelï¿½Ðµï¿½visible point
 	pcl::PointCloud<pcl::PointNormal> Handmodel_visible_cloud;
 	std::vector<int> visible_idx;
 
@@ -259,7 +264,7 @@ void Worker::FindHandCorrespond()
 	}
 
 
-	//È»ºóÔÙÕÒ¶ÔÓ¦µã
+	//È»ï¿½ï¿½ï¿½ï¿½ï¿½Ò¶ï¿½Ó¦ï¿½ï¿½
 	int NumVisible_ = Handmodel_visible_cloud.points.size();
 	int NumPointCloud_sensor = mImage_InputData->hand.pointcloud.points.size();
 
@@ -268,7 +273,7 @@ void Worker::FindHandCorrespond()
 		Hand_correspond.resize(NumPointCloud_sensor);
 
 		pcl::KdTreeFLANN<pcl::PointNormal> search_kdtree;
-		search_kdtree.setInputCloud(Handmodel_visible_cloud.makeShared());  //ÕâÀï×¢ÒâPCLµÄflann»áºÍopencvµÄflann³åÍ»£¬×¢Òâ½â¾ö
+		search_kdtree.setInputCloud(Handmodel_visible_cloud.makeShared());  //ï¿½ï¿½ï¿½ï¿½×¢ï¿½ï¿½PCLï¿½ï¿½flannï¿½ï¿½ï¿½opencvï¿½ï¿½flannï¿½ï¿½Í»ï¿½ï¿½×¢ï¿½ï¿½ï¿½ï¿½
 
 		const int k = 1;
 		std::vector<int> k_indices(k);
@@ -291,18 +296,55 @@ void Worker::FindHandCorrespond()
 
 			float distance = (p_2 - p).norm();
 
-			if (distance > 30)
+			if (distance > 100)
 				Hand_correspond[i].is_match = false;
 			else
 				Hand_correspond[i].is_match = true;
 		}
 	}
 
+	int NumHandVisible_ = mHandModel->Visible_3D.size();
+	if (NumHandVisible_ > 0 && NumPointCloud_sensor > 0 && itr == (setting->max_itr - 1))
+	{
+		pcl::KdTreeFLANN<pcl::PointNormal> search_kdtree;
+		search_kdtree.setInputCloud(mImage_InputData->hand.pointcloud.makeShared());  //ï¿½ï¿½ï¿½ï¿½×¢ï¿½ï¿½PCLï¿½ï¿½flannï¿½ï¿½ï¿½opencvï¿½ï¿½flannï¿½ï¿½Í»ï¿½ï¿½×¢ï¿½ï¿½ï¿½ï¿½
+
+		const int k = 1;
+		std::vector<int> k_indices(k);
+		std::vector<float> k_squared_distances(k);
+		for (int i = 0; i < NumHandVisible_; ++i)
+		{
+			search_kdtree.nearestKSearch(mHandModel->Visible_3D, i, k, k_indices, k_squared_distances);
+
+			DataAndCorrespond tmp;
+			Eigen::Vector3f p = Eigen::Vector3f(mImage_InputData->hand.pointcloud.points[k_indices[0]].x,
+				mImage_InputData->hand.pointcloud.points[k_indices[0]].y,
+				mImage_InputData->hand.pointcloud.points[k_indices[0]].z);
+			tmp.pointcloud = p;
+
+			Eigen::Vector3f p_2 = Eigen::Vector3f(mHandModel->Visible_3D.points[i].x,
+				mHandModel->Visible_3D.points[i].y,
+				mHandModel->Visible_3D.points[i].z);
+
+			tmp.correspond = p_2;
+			tmp.correspond_idx = mHandModel->V_Visible_2D[i].second;
+
+			float distance = (p_2 - p).norm();
+
+			if (distance > 50)
+				tmp.is_match = false;
+			else
+				tmp.is_match = true;
+
+			Hand_correspond.emplace_back(tmp);
+
+		}
+	}
 
 	num_Hand_matched_correspond = 0;
-	for (int i = 0; i < NumPointCloud_sensor; ++i)
+	for(vector<DataAndCorrespond>::iterator itr = Hand_correspond.begin();itr!=Hand_correspond.end();++itr)
 	{
-		if (Hand_correspond[i].is_match)
+		if (itr->is_match)
 			++num_Hand_matched_correspond;
 	}
 }
@@ -317,10 +359,10 @@ void Worker::Hand_one_tracking()
 	float error_3D = this->Fitting3D(linear_system);
 	this->Fitting2D(linear_system);
 
-	//ÕâÀï¿ÉÒÔ¿ªÊ¼¸üÐÂkalmanµÄº£É­¾ØÕó
+	//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô¿ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½kalmanï¿½Äºï¿½É­ï¿½ï¿½ï¿½ï¿½
 	if (itr>(setting->max_itr - 2)
 		&& error_3D < 8.0f
-		&& !kalman->judgeFitted())  //¾¡Á¿ÔÚ¸üÐÂµÄµü´úºó¼¸´Î£¬²¢ÇÒ¸ú×Ù³É¹¦µÄÊ±ºò¸üÐÂ
+		&& !kalman->judgeFitted())  //ï¿½ï¿½ï¿½ï¿½ï¿½Ú¸ï¿½ï¿½ÂµÄµï¿½ï¿½ï¿½ï¿½ó¼¸´Î£ï¿½ï¿½ï¿½ï¿½Ò¸ï¿½ï¿½Ù³É¹ï¿½ï¿½ï¿½Ê±ï¿½ï¿½ï¿½ï¿½ï¿½
 		kalman->Set_measured_hessian(linear_system);
 	this->MaxMinLimit(linear_system);
 	this->PcaLimit(linear_system);
@@ -335,22 +377,22 @@ void Worker::Hand_one_tracking()
 	this->CollisionLimit(linear_system);
 	this->Damping(linear_system);
 	if (itr < setting->max_rigid_itr)
-		this->RigidOnly(linear_system);  //Õâ¸öÒ»¶¨Òª·Å×îºó
+		this->RigidOnly(linear_system);  //ï¿½ï¿½ï¿½Ò»ï¿½ï¿½Òªï¿½ï¿½ï¿½ï¿½ï¿½
 
-	//Çó½â
+	//ï¿½ï¿½ï¿½
 	Eigen::VectorXf solution = this->Solver(linear_system);
 
 	for (int i = 0; i < (NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS); ++i)
 		Hand_Params[i] += solution[i];
 
-	//ÕâÀï¿ÉÒÔÍ¨¹ýtotal_itrµü´ú´ÎÊýÅÐ¶Ï£¬Í¨¹ýkalman¸üÐÂÐÎ×´²ÎÊýµÄ¼ä¸ô
+	//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Í¨ï¿½ï¿½total_itrï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð¶Ï£ï¿½Í¨ï¿½ï¿½kalmanï¿½ï¿½ï¿½ï¿½ï¿½ï¿½×´ï¿½ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½
 	if (total_itr > 2 * setting->frames_interval_between_measurements
 		&& (total_itr % setting->frames_interval_between_measurements) == 0
 		&& error_3D < 8.0f
 		&& !kalman->judgeFitted())
 		kalman->Update_estimate(Hand_Params.head(NUM_HAND_SHAPE_PARAMS));
 
-	//¸üÐÂ²ÎÊý
+	//ï¿½ï¿½ï¿½Â²ï¿½ï¿½ï¿½
 	mHandModel->set_Shape_Params(Hand_Params.head(NUM_HAND_SHAPE_PARAMS));
 	mHandModel->set_Pose_Params(Hand_Params.tail(NUM_HAND_POSE_PARAMS));
 	mHandModel->UpdataModel();
@@ -358,7 +400,7 @@ void Worker::Hand_one_tracking()
 
 void Worker::Object_one_tracking(int obj_idx)
 {
-	//³õÊ¼»¯Çó½âÏà¹Ø
+	//ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	LinearSystem linear_system;
 	linear_system.lhs = Eigen::MatrixXf::Zero(NUM_OBJECT_PARAMS,NUM_OBJECT_PARAMS);
 	linear_system.rhs = Eigen::VectorXf::Zero(NUM_OBJECT_PARAMS);
@@ -371,7 +413,7 @@ void Worker::Object_one_tracking(int obj_idx)
 	this->Object_CollisionLimit(linear_system, obj_idx);
 	this->Object_Damping(linear_system);
 
-	//Çó½â
+	//ï¿½ï¿½ï¿½
 	Eigen::VectorXf solution = this->Solver(linear_system);
 
 	for (int i = 0; i < NUM_OBJECT_PARAMS; ++i)
@@ -403,19 +445,21 @@ float Worker::Fitting3D(LinearSystem& linear_system)
 
 			float e_sqrt = sqrt(pow(e(count * 3 + 0), 2) + pow(e(count * 3 + 1), 2) + pow(e(count * 3 + 2), 2));
 			hand_3D_error += e_sqrt;
-			//ÕâÀïÊ¹ÓÃµÄÊÇReweighted Least squard error
-			//²Î¿¼£º
-			//https://www.cs.bgu.ac.il/~mcv172/wiki.files/Lec5.pdf £¨Ö÷Òª£©
-			//https://blog.csdn.net/baidu_17640849/article/details/71155537  £¨¸¨Öú£©
+			//ï¿½ï¿½ï¿½ï¿½Ê¹ï¿½Ãµï¿½ï¿½ï¿½Reweighted Least squard error
+			//ï¿½Î¿ï¿½ï¿½ï¿½
+			//https://www.cs.bgu.ac.il/~mcv172/wiki.files/Lec5.pdf ï¿½ï¿½ï¿½ï¿½Òªï¿½ï¿½
+			//https://blog.csdn.net/baidu_17640849/article/details/71155537  ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 			//weight = s/(e^2 + s^2)
 
 
-			//sÔ½´ó£¬¶ÔÒì³£ÖµµÄÈÝÈÌÔ½´ó
+			//sÔ½ï¿½ó£¬¶ï¿½ï¿½ì³£Öµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô½ï¿½ï¿½
 			float s = 50;
 			float weight = 1;
 			weight = (itr + 1) * s / (e_sqrt + s);
 
 			weight = 6.5f / sqrt(e_sqrt + 0.001);
+
+			weight *= mHandModel->vertices_fitting_weight[v_id];
 
 			e(count * 3 + 0) *= weight;
 			e(count * 3 + 1) *= weight;
@@ -445,7 +489,7 @@ void Worker::Object_Fitting_3D(LinearSystem& linear_system, int obj_idx)
 	Eigen::VectorXf e = Eigen::VectorXf::Zero(NumofCorrespond * 3);
 	Eigen::MatrixXf J = Eigen::MatrixXf::Zero(NumofCorrespond * 3, NUM_OBJECT_PARAMS);
 
-	//ÁÙÊ±±äÁ¿
+	//ï¿½ï¿½Ê±ï¿½ï¿½ï¿½ï¿½
 	Eigen::MatrixXf tmp_jacob;
 	int count = 0;
 	int Object_correspond_size = Object_corresponds[obj_idx].size();
@@ -461,14 +505,14 @@ void Worker::Object_Fitting_3D(LinearSystem& linear_system, int obj_idx)
 			e(count * 3 + 2) = Object_corresponds[obj_idx][i].pointcloud(2) - Object_corresponds[obj_idx][i].correspond(2);
 
 			float e_sqrt = sqrt(pow(e(count * 3 + 0), 2) + pow(e(count * 3 + 1), 2) + pow(e(count * 3 + 2), 2));
-			//ÕâÀïÊ¹ÓÃµÄÊÇReweighted Least squard error
-			//²Î¿¼£º
-			//https://www.cs.bgu.ac.il/~mcv172/wiki.files/Lec5.pdf £¨Ö÷Òª£©
-			//https://blog.csdn.net/baidu_17640849/article/details/71155537  £¨¸¨Öú£©
+			//ï¿½ï¿½ï¿½ï¿½Ê¹ï¿½Ãµï¿½ï¿½ï¿½Reweighted Least squard error
+			//ï¿½Î¿ï¿½ï¿½ï¿½
+			//https://www.cs.bgu.ac.il/~mcv172/wiki.files/Lec5.pdf ï¿½ï¿½ï¿½ï¿½Òªï¿½ï¿½
+			//https://blog.csdn.net/baidu_17640849/article/details/71155537  ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 			//weight = s/(e^2 + s^2)
 
 
-			//sÔ½´ó£¬¶ÔÒì³£ÖµµÄÈÝÈÌÔ½´ó
+			//sÔ½ï¿½ó£¬¶ï¿½ï¿½ì³£Öµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô½ï¿½ï¿½
 			float s = 50;
 			float weight = 1;
 			weight = (itr + 1) * s / (e_sqrt + s);
@@ -515,17 +559,17 @@ void Worker::Fitting2D(LinearSystem& linear_system)
 
 			if (closet_distance > 0)
 			{
-				//¼ÆËã J ºÍ e
+				//ï¿½ï¿½ï¿½ï¿½ J ï¿½ï¿½ e
 				pair<Eigen::Matrix2Xf, Eigen::Vector2f> J_and_e;
 
-				//ÏÈËãe
+				//ï¿½ï¿½ï¿½ï¿½e
 				Eigen::Vector2f e;
 				e(0) = (float)pixel_2D_cloest(0) - (float)pixel_2D_pos(0);
 				e(1) = (float)pixel_2D_cloest(1) - (float)pixel_2D_pos(1);
 
 				J_and_e.second = e;
 
-				//ÔÙ¼ÆËãJ
+				//ï¿½Ù¼ï¿½ï¿½ï¿½J
 				Eigen::Matrix<float, 2, 3> J_perspective = mCamera->projection_jacobian(pixel_3D_pos);
 				Eigen::MatrixXf J_3D;
 
@@ -586,17 +630,17 @@ void Worker::Object_Fitting_2D(LinearSystem& linear_system, int obj_idx)
 
 			if (closet_distance > 0)
 			{
-				//¼ÆËã J ºÍ e
+				//ï¿½ï¿½ï¿½ï¿½ J ï¿½ï¿½ e
 				pair<Eigen::Matrix2Xf, Eigen::Vector2f> J_and_e;
 
-				//ÏÈËãe
+				//ï¿½ï¿½ï¿½ï¿½e
 				Eigen::Vector2f e;
 				e(0) = (float)pixel_2D_cloest(0) - (float)pixel_2D_pos(0);
 				e(1) = (float)pixel_2D_cloest(1) - (float)pixel_2D_pos(1);
 
 				J_and_e.second = e;
 
-				//ÔÙ¼ÆËãJ
+				//ï¿½Ù¼ï¿½ï¿½ï¿½J
 				Eigen::Matrix<float, 2, 3> J_perspective = mCamera->projection_jacobian(pixel_3D_pos);
 				mInteracted_Objects[obj_idx]->object_jacobain(tmp_jacob, idx);
 
@@ -666,7 +710,7 @@ void Worker::PcaLimit(LinearSystem& linear_system)
 
 
 	//{
-	//	//Õâ²¿·ÖÓ¦¸ÃÊÇËæ×ÅkalmanµÄÕûºÏ±ä»¯µÄ£¬ÎÞÂÛÊÇ ¾ùÖµ »¹ÊÇ ·½²î
+	//	//ï¿½â²¿ï¿½ï¿½Ó¦ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½kalmanï¿½ï¿½ï¿½ï¿½ï¿½Ï±ä»¯ï¿½Ä£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Öµ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 	//	Eigen::MatrixXf shape_Sigma = Eigen::MatrixXf::Identity(this->Shape_params_num, this->Shape_params_num);
 	//	shape_Sigma.diagonal() = handmodel->Hand_Shape_var;
 	//	Eigen::MatrixXf InvShape_Sigma = shape_Sigma.inverse();
@@ -714,7 +758,7 @@ void Worker::GloveDifferenceMaxMinPCALimit(LinearSystem& linear_system)
 	Eigen::VectorXf Params_fingers = this->Hand_Params.tail(NUM_HAND_FINGER_PARAMS);
 	Eigen::VectorXf Params_glove_fingers = this->Glove_params.tail(NUM_HAND_FINGER_PARAMS);
 
-	//ÏÂÃæ½øÐÐPCA±ä»»
+	//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½PCAï¿½ä»»
 	Eigen::VectorXf Params_fingers_Pca = mHandModel->Hands_components.leftCols(K).transpose() * (Params_fingers - mHandModel->Hands_mean);
 	Eigen::VectorXf Params_glove_fingers_Pca = mHandModel->Hands_components.leftCols(K).transpose() * (Params_glove_fingers - mHandModel->Hands_mean);
 
@@ -722,7 +766,7 @@ void Worker::GloveDifferenceMaxMinPCALimit(LinearSystem& linear_system)
 
 	for (int i = 0; i < K; ++i)
 	{
-		//·Ö±ð¼ÆËãÃ¿Ò»¸öÎ¬¶È
+		//ï¿½Ö±ï¿½ï¿½ï¿½ï¿½Ã¿Ò»ï¿½ï¿½Î¬ï¿½ï¿½
 		float params_difference_PCA_MAX = mHandModel->Glove_Difference_MaxPCA(i);
 		float params_difference_PCA_Min = mHandModel->Glove_Difference_MinPCA(i);
 
@@ -749,14 +793,14 @@ void Worker::GloveDifferenceVarPCALimit(LinearSystem& linear_system)
 	Eigen::VectorXf Params_fingers = this->Hand_Params.tail(NUM_HAND_FINGER_PARAMS);
 	Eigen::VectorXf Params_glove_fingers = this->Glove_params.tail(NUM_HAND_FINGER_PARAMS);
 
-	//ÏÂÃæ½øÐÐPCA±ä»»
+	//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½PCAï¿½ä»»
 	Eigen::VectorXf Params_fingers_Pca = mHandModel->Hands_components.leftCols(K).transpose() * (Params_fingers - mHandModel->Hands_mean);
 	Eigen::VectorXf Params_glove_fingers_Pca = mHandModel->Hands_components.leftCols(K).transpose() * (Params_glove_fingers - mHandModel->Hands_mean);
 
 	Eigen::VectorXf Params_finger_PCA_Difference = Params_fingers_Pca - Params_glove_fingers_Pca;
 
 
-	//ÏÂÃæ¼ÆËãÑÅ¸÷±È
+	//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Å¸ï¿½ï¿½ï¿½
 	Eigen::MatrixXf P = mHandModel->Hands_components.leftCols(K).transpose();
 
 	Eigen::MatrixXf pose_Sigma = Eigen::MatrixXf::Identity(K, K);
@@ -843,7 +887,7 @@ void Worker::CollisionLimit(LinearSystem& linear_system)
 		{
 			for (int j = 0; j < CollisionSphereNum; ++j)
 			{
-				if (mHandModel->Collision_Judge_Matrix(i, j) == 1) //·¢ÉúÅö×²£¬¹æÔòÎª i ºÍ j Åö×²£¬Ôòi ÐèÒªÒÆ¶¯£¨ºóÃæÓÐ j ºÍ i Åö×²£¬jÐèÒªÒÆ¶¯£©
+				if (mHandModel->Collision_Judge_Matrix(i, j) == 1) //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½×²ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Îª i ï¿½ï¿½ j ï¿½ï¿½×²ï¿½ï¿½ï¿½ï¿½i ï¿½ï¿½Òªï¿½Æ¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ j ï¿½ï¿½ i ï¿½ï¿½×²ï¿½ï¿½jï¿½ï¿½Òªï¿½Æ¶ï¿½ï¿½ï¿½
 				{
 					Eigen::Vector3f dir_i_to_j;
 
@@ -983,10 +1027,9 @@ void Worker::Evaluation()
 	int rows = mCamera->height();
 	int cols = mCamera->width();
 
-	//ÏÈÍ¨¹ýÈËÊÖºÍÎïÌåµÄÉú³ÉµÄÉî¶ÈÍ¼ºÏ³ÉÒ»¸ö×ÜÌåµÄÉî¶ÈÍ¼£¬¸ù¾ÝÉî¶ÈÇ°ºó¹ØÏµ½øÐÐºÏ²¢
+	//ï¿½ï¿½Í¨ï¿½ï¿½ï¿½ï¿½ï¿½Öºï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Éµï¿½ï¿½ï¿½ï¿½Í¼ï¿½Ï³ï¿½Ò»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Í¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ç°ï¿½ï¿½ï¿½Ïµï¿½ï¿½ï¿½ÐºÏ²ï¿½
 	for(int obj_idx = 0;obj_idx<mInteracted_Objects.size();++obj_idx)
 		mInteracted_Objects[obj_idx]->GenerateDepthAndSilhouette();
-	mHandModel->GenerateDepthMap();
 
 	mRendered_Images.setToZero();
 

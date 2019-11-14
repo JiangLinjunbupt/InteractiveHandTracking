@@ -107,7 +107,7 @@ void TrackingManager::GeneratedStartPoints(vector<Eigen::VectorXf>& hand_init, v
 				hand_start3(43) = eular(1);
 				hand_start3(44) = eular(2);
 			}
-			hand_start3.head(3) = pre_HandParams.head(3);
+			hand_start3.head(3) = pre_hand.head(3);
 
 			hand_init.push_back(hand_start3);
 			obj_init.push_back(obj_param);

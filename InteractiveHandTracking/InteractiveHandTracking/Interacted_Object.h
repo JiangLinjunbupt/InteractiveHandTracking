@@ -37,6 +37,7 @@ public:
 
 	//可见点
 	vector<std::pair<Vector3, int>> Visible_2D;
+	pcl::PointCloud<pcl::PointNormal> Visible_3D;
 
 	//具体的物体属性
 	Object_attribute mObject_attribute;

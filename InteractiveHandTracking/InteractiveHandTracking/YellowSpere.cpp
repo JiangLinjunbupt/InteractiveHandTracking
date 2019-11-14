@@ -13,6 +13,7 @@ YellowSphere::YellowSphere(Camera* camera) : Interacted_Object(camera)
 	Final_Normal.assign(init_Normal.begin(), init_Normal.end());
 
 	Visible_2D.reserve(init_Vertices.size());
+	Visible_3D.reserve(init_Vertices.size());
 	//初始化参数设为0
 	this->Update(object_params);
 }
@@ -132,7 +133,12 @@ void YellowSphere::Update(const Eigen::VectorXf& params)
 
 void YellowSphere::UpdateVerticesAndNormal()
 {
+	float width = mCamera->width();
+	float heigh = mCamera->height();
+
 	Visible_2D.clear();
+	Visible_3D.points.clear();
+
 
 	Eigen::Matrix4f TransMatrix = Eigen::Matrix4f::Identity();
 	TransMatrix(0, 3) = object_params(0);
@@ -155,7 +161,21 @@ void YellowSphere::UpdateVerticesAndNormal()
 		if (Final_Normal[i].z() < 0)
 		{
 			Vector2 p_2D = mCamera->world_to_image(Final_Vertices[i]);
-			Visible_2D.emplace_back(make_pair(Vector3(p_2D(0), p_2D(1), Final_Vertices[i](2)),i));
+			if (p_2D.x() >= 0 && p_2D.x() < width && p_2D.y() >= 0 && p_2D.y() < heigh)
+			{
+				Visible_2D.emplace_back(make_pair(Vector3(p_2D(0), p_2D(1), Final_Vertices[i](2)), i));
+
+				pcl::PointNormal p_3D;
+				p_3D.x = Final_Vertices[i].x();
+				p_3D.y = Final_Vertices[i].y();
+				p_3D.z = Final_Vertices[i].z();
+
+				p_3D.normal_x = Final_Normal[i].x();
+				p_3D.normal_y = Final_Normal[i].y();
+				p_3D.normal_z = Final_Normal[i].z();
+
+				Visible_3D.points.emplace_back(p_3D);
+			}
 		}
 	}
 }

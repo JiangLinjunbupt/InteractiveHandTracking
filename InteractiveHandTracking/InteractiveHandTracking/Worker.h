@@ -30,7 +30,7 @@ private:
 		float Hand_Pose_Damping_weight_For_BigRotate = 100;
 		float Collision_weight = 100.0f;
 
-		int max_itr = 6;
+		int max_itr = 15;
 		int max_rigid_itr = 0;
 		int frames_interval_between_measurements = 60;
 

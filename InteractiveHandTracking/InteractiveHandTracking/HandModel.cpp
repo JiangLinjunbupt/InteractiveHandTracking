@@ -177,6 +177,8 @@ void HandModel::LoadModel()
 	this->Load_GloveDifference_Max_MinPCA(gloveDifference_MaxMinPCA_filename.c_str());
 	this->Load_GloveDifference_VarPCA(gloveDifference_VarPCA_filename.c_str());
 
+	std::string vertices_FittingWeight_filename = ".\\Data\\vertices_FittingWeight.txt";
+	this->Load_Vertices_FittingWeight(vertices_FittingWeight_filename.c_str());
 	std::cout << "Load Model success " << std::endl;
 }
 
@@ -516,6 +518,20 @@ void HandModel::Load_GloveDifference_VarPCA(const char* filename)
 
 	std::cout << "Load GloveDifference_var_PCA success\n";
 }
+
+void HandModel::Load_Vertices_FittingWeight(const char* filename)
+{
+	std::ifstream f;
+	f.open(filename);
+	if (!f.is_open())  std::cerr << "Load  Load_Vertices_FittingWeight  error,  can not open this file !!! \n";
+
+	vertices_fitting_weight.resize(Vertex_num);
+	for (int i = 0; i < Vertex_num; ++i)
+		f >> vertices_fitting_weight[i];
+	f.close();
+
+	std::cout << "Load Vertices_FittingWeight success\n";
+}
 #pragma endregion LoadFunctions
 
 
@@ -524,6 +540,7 @@ void HandModel::UpdataModel()
 	auto m_begin = high_resolution_clock::now();
 	this->Updata_V_rest();
 	this->LBS_Updata();
+	this->GenerateDepthMap();
 	this->NormalUpdata();
 	this->Jacob_Matrix_Updata();
 
@@ -756,7 +773,7 @@ void HandModel::NormalUpdata()
 		//这里我假设，如果假设错了，那么叉乘时候，就BC*BA变成BA*BC
 		//            A
 		//          /  \
-												       //         B — C
+		//         B — C
 		A << this->V_Final(this->F(i, 0), 0), this->V_Final(this->F(i, 0), 1), this->V_Final(this->F(i, 0), 2);
 		B << this->V_Final(this->F(i, 1), 0), this->V_Final(this->F(i, 1), 1), this->V_Final(this->F(i, 1), 2);
 		C << this->V_Final(this->F(i, 2), 0), this->V_Final(this->F(i, 2), 1), this->V_Final(this->F(i, 2), 2);
@@ -793,6 +810,8 @@ void HandModel::NormalUpdata()
 	}
 
 	V_Visible_2D.clear();
+	Visible_3D.points.clear();
+
 	int width = camera->width();
 	int height = camera->height();
 
@@ -809,7 +828,25 @@ void HandModel::NormalUpdata()
 
 			if (row_ >= 0 && row_ <height && col_ >= 0 && col_ < width)
 			{
-				V_Visible_2D.push_back(make_pair(Eigen::Vector2i(col_, row_), i));
+
+				ushort pixel_depth = this->HandModel_depthMap.at<ushort>(row_, col_);
+				float depth_diff = abs(this->V_Final(i, 2) - pixel_depth);
+
+				if (depth_diff < 2)
+				{
+					V_Visible_2D.push_back(make_pair(Eigen::Vector2i(col_, row_), i));
+
+					pcl::PointNormal p_3D;
+					p_3D.x = V_Final(i, 0);
+					p_3D.y = V_Final(i, 1);
+					p_3D.z = V_Final(i, 2);
+
+					p_3D.normal_x = V_Normal_Final(i, 0);
+					p_3D.normal_y = V_Normal_Final(i, 1);
+					p_3D.normal_z = V_Normal_Final(i, 2);
+
+					Visible_3D.points.emplace_back(p_3D);
+				}
 			}
 		}
 	}

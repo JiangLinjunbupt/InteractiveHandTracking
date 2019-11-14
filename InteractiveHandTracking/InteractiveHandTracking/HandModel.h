@@ -57,6 +57,7 @@ public:
 	Eigen::MatrixXf J_Final;   //经过pose和trans之后某个姿态下的关节点
 
 	std::vector<std::pair<Eigen::Vector2i, int>> V_Visible_2D;   //2D的可见点
+	pcl::PointCloud<pcl::PointNormal> Visible_3D;
 
 	std::map<int, int> Parent;
 	std::map<int, int> Child;
@@ -77,6 +78,7 @@ public:
 	Eigen::VectorXf Glove_Difference_MaxPCA;
 	Eigen::VectorXf Glove_Difference_VARPCA;
 
+	vector<float> vertices_fitting_weight;
 private:
 	Camera* camera;
 	//控制手型的参数
@@ -156,6 +158,7 @@ private:
 	void Load_GloveDifference_Max_MinPCA(const char* filename);
 	void Load_GloveDifference_VarPCA(const char* filename);
 
+	void Load_Vertices_FittingWeight(const char* filename);
 	//更新顶点和关节点的函数
 	void Updata_V_rest();
 	void ShapeSpaceBlend();

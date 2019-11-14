@@ -343,10 +343,12 @@ namespace DS
 		gluLookAt(x + control.gx, y + control.gy, z + control.gz, control.gx, control.gy, control.gz, 0.0, 1.0, 0.0);//个人理解最开始是看向-z的，之后的角度是在global中心上叠加的，所以要加
 
 		draw_HandModel();
-		draw_Interacted_Object();
+		//draw_Interacted_Object();
 		draw_HandPointCloud();
-		draw_ObjectCloud();
-		draw_ObjectCloudNormal();
+		//draw_HandPointCloudNormal();
+
+		//draw_ObjectCloud();
+		//draw_ObjectCloudNormal();
 		draw_Coordinate();
 
 		glFlush();
