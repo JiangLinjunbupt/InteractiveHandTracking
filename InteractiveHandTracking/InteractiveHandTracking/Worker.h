@@ -30,8 +30,11 @@ private:
 		float Hand_Pose_Damping_weight_For_BigRotate = 100;
 		float Collision_weight = 100.0f;
 
+		//交互
+		float Hand_object_collision = 100.0f;
+
 		int max_itr = 15;
-		int max_rigid_itr = 0;
+		int max_rigid_itr = 1;
 		int frames_interval_between_measurements = 60;
 
 		float tracking_fail_threshold = 70.0f;
@@ -104,6 +107,8 @@ private:
 	void Object_CollisionLimit(LinearSystem& linear_system, int obj_idx);
 	void Object_Damping(LinearSystem& linear_system);
 
+	//交互产生的碰撞等
+	void Hand_Object_Collision(LinearSystem& linear_system);
 
 	Eigen::VectorXf Solver(LinearSystem& linear_system);
 	void Evaluation();

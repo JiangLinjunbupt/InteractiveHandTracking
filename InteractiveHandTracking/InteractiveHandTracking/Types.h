@@ -64,9 +64,11 @@ struct LinearSystem {
 struct DataAndCorrespond
 {
 	Vector3 pointcloud;
+	Vector3 pointcloud_n;
 	int pointcloud_idx;
 
 	Vector3 correspond;
+	Vector3 correspond_n;
 	int correspond_idx;
 
 	bool is_match;

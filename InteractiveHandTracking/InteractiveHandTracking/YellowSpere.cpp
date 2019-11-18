@@ -199,3 +199,13 @@ Eigen::VectorXf YellowSphere::FindTarget(const Eigen::VectorXf& p)
 
 	return C + R * dir;
 }
+
+Eigen::VectorXf YellowSphere::FindTouchPoint(const Eigen::VectorXf& p)
+{
+	float R = mObject_attribute.radius;
+	Vector3 C = Vector3(object_params(0), object_params(1), object_params(2));
+
+	Vector3 dir = (p - C).normalized();
+
+	return C + R * dir;
+}

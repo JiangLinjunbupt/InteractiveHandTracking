@@ -286,17 +286,24 @@ void Worker::FindHandCorrespond()
 				mImage_InputData->hand.pointcloud.points[i].y,
 				mImage_InputData->hand.pointcloud.points[i].z);
 			Hand_correspond[i].pointcloud = p;
+			Hand_correspond[i].pointcloud_n = Eigen::Vector3f(mImage_InputData->hand.pointcloud.points[i].normal_x,
+				mImage_InputData->hand.pointcloud.points[i].normal_y,
+				mImage_InputData->hand.pointcloud.points[i].normal_z);
+
 
 			Eigen::Vector3f p_2 = Eigen::Vector3f(Handmodel_visible_cloud.points[k_indices[0]].x,
 				Handmodel_visible_cloud.points[k_indices[0]].y,
 				Handmodel_visible_cloud.points[k_indices[0]].z);
 
 			Hand_correspond[i].correspond = p_2;
+			Hand_correspond[i].correspond_n = Eigen::Vector3f(Handmodel_visible_cloud.points[k_indices[0]].normal_x,
+				Handmodel_visible_cloud.points[k_indices[0]].normal_y,
+				Handmodel_visible_cloud.points[k_indices[0]].normal_z);
 			Hand_correspond[i].correspond_idx = visible_idx[k_indices[0]];
 
 			float distance = (p_2 - p).norm();
 
-			if (distance > 100)
+			if (distance > 50)
 				Hand_correspond[i].is_match = false;
 			else
 				Hand_correspond[i].is_match = true;
@@ -321,12 +328,18 @@ void Worker::FindHandCorrespond()
 				mImage_InputData->hand.pointcloud.points[k_indices[0]].y,
 				mImage_InputData->hand.pointcloud.points[k_indices[0]].z);
 			tmp.pointcloud = p;
+			tmp.pointcloud_n = Eigen::Vector3f(mImage_InputData->hand.pointcloud.points[k_indices[0]].normal_x,
+				mImage_InputData->hand.pointcloud.points[k_indices[0]].normal_y,
+				mImage_InputData->hand.pointcloud.points[k_indices[0]].normal_z);
 
 			Eigen::Vector3f p_2 = Eigen::Vector3f(mHandModel->Visible_3D.points[i].x,
 				mHandModel->Visible_3D.points[i].y,
 				mHandModel->Visible_3D.points[i].z);
 
 			tmp.correspond = p_2;
+			tmp.correspond_n = Eigen::Vector3f(mHandModel->Visible_3D.points[i].normal_x,
+				mHandModel->Visible_3D.points[i].normal_y,
+				mHandModel->Visible_3D.points[i].normal_z);
 			tmp.correspond_idx = mHandModel->V_Visible_2D[i].second;
 
 			float distance = (p_2 - p).norm();
@@ -375,6 +388,7 @@ void Worker::Hand_one_tracking()
 	this->TemporalLimit(linear_system, false);
 	kalman->track(linear_system, Hand_Params.head(NUM_HAND_SHAPE_PARAMS));
 	this->CollisionLimit(linear_system);
+	Hand_Object_Collision(linear_system);
 	this->Damping(linear_system);
 	if (itr < setting->max_rigid_itr)
 		this->RigidOnly(linear_system);  //���һ��Ҫ�����
@@ -460,6 +474,7 @@ float Worker::Fitting3D(LinearSystem& linear_system)
 			weight = 6.5f / sqrt(e_sqrt + 0.001);
 
 			weight *= mHandModel->vertices_fitting_weight[v_id];
+			weight *= Hand_correspond[i].correspond_n.dot(Hand_correspond[i].pointcloud_n);
 
 			e(count * 3 + 0) *= weight;
 			e(count * 3 + 1) *= weight;
@@ -989,6 +1004,50 @@ void Worker::Object_Damping(LinearSystem& linear_system)
 	D(5, 5) = setting->Object_Rotate_Damping;
 
 	linear_system.lhs += D;
+}
+
+void Worker::Hand_Object_Collision(LinearSystem& linear_system)
+{
+	vector<pair<int,Vector3>> hand_obj_col;
+
+	for (int v_id = 0; v_id < mHandModel->Vertex_num; ++v_id)
+	{
+		for (int obj_idx = 0; obj_idx < mInteracted_Objects.size(); ++obj_idx)
+		{
+			Eigen::Vector3f p(mHandModel->V_Final(v_id, 0), mHandModel->V_Final(v_id, 1), mHandModel->V_Final(v_id, 2));
+			if (mInteracted_Objects[obj_idx]->Is_inside(p))
+			{
+				Eigen::Vector3f cor = mInteracted_Objects[obj_idx]->FindTarget(p);
+				hand_obj_col.emplace_back(make_pair(v_id, cor));
+			}
+		}
+	}
+
+	int collision_size = static_cast<int>(hand_obj_col.size());
+
+	if (collision_size > 0)
+	{
+		Eigen::VectorXf e = Eigen::VectorXf::Zero(collision_size * 3);
+		Eigen::MatrixXf J = Eigen::MatrixXf::Zero(collision_size * 3, NUM_HAND_POSE_PARAMS);
+		Eigen::MatrixXf pose_jacob;
+
+		for (int i = 0; i < collision_size; ++i)
+		{
+			int v_id = hand_obj_col[i].first;
+
+			e(i * 3 + 0) = (hand_obj_col[i].second)(0) - mHandModel->V_Final(v_id, 0);
+			e(i * 3 + 1) = (hand_obj_col[i].second)(1) - mHandModel->V_Final(v_id, 1);
+			e(i * 3 + 2) = (hand_obj_col[i].second)(2) - mHandModel->V_Final(v_id, 2);
+
+			mHandModel->Pose_jacobain(pose_jacob, v_id);
+
+			J.block(i * 3, 0, 3, NUM_HAND_POSE_PARAMS) = pose_jacob;
+		}
+
+		linear_system.lhs.block(NUM_HAND_SHAPE_PARAMS, NUM_HAND_SHAPE_PARAMS,
+			NUM_HAND_POSE_PARAMS, NUM_HAND_POSE_PARAMS) += setting->Hand_object_collision * J.transpose() * J;
+		linear_system.rhs.tail(NUM_HAND_POSE_PARAMS) += setting->Hand_object_collision*J.transpose()*e;
+	}
 }
 
 Eigen::VectorXf Worker::Solver(LinearSystem& linear_system)

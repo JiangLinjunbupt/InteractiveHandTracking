@@ -78,6 +78,7 @@ public:
 	}
 	virtual bool Is_inside(const Eigen::VectorXf& p) = 0;
 	virtual Eigen::VectorXf FindTarget(const Eigen::VectorXf& p) = 0;
+	virtual Eigen::VectorXf FindTouchPoint(const Eigen::VectorXf& p) = 0;
 protected:
 	Eigen::Matrix3f EularToRotateMatrix(float x, float y, float z)
 	{
@@ -156,6 +157,7 @@ public:
 	void Update(const Eigen::VectorXf& params);
 	bool Is_inside(const Eigen::VectorXf& p);
 	Eigen::VectorXf FindTarget(const Eigen::VectorXf& p);
+	Eigen::VectorXf FindTouchPoint(const Eigen::VectorXf& p);
 };
 
 
@@ -176,4 +178,5 @@ public:
 	void Update(const Eigen::VectorXf& params);
 	bool Is_inside(const Eigen::VectorXf& p);
 	Eigen::VectorXf FindTarget(const Eigen::VectorXf& p);
+	Eigen::VectorXf FindTouchPoint(const Eigen::VectorXf& p);
 };

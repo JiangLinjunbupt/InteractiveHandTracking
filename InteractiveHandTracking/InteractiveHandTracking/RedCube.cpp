@@ -488,3 +488,40 @@ Eigen::VectorXf RedCube::FindTarget(const Eigen::VectorXf& p)
 
 	return target;
 }
+
+Eigen::VectorXf RedCube::FindTouchPoint(const Eigen::VectorXf& p)
+{
+	if (Is_inside(p))
+		return FindTarget(p);
+	else
+	{
+		Eigen::Matrix4f T_local = Eigen::Matrix4f::Identity();
+		T_local.block(0, 0, 3, 3) = Coordinate;
+		T_local(0, 3) = object_params(0);
+		T_local(1, 3) = object_params(1);
+		T_local(2, 3) = object_params(2);
+
+		Eigen::Vector4f p_tmp = Eigen::Vector4f(p(0), p(1), p(2), 1);
+		Eigen::Vector3f p_local = (T_local.inverse() * p_tmp).head(3);
+
+		Eigen::Vector3f diff;
+		diff << max(abs(p_local(0)) - mObject_attribute.length / 2.0f,0.0f),
+			max(abs(p_local(1)) - mObject_attribute.length / 2.0f,0.0f),
+			max(abs(p_local(2)) - mObject_attribute.length / 2.0f,0.0f);
+
+		Eigen::Vector3f dir;
+		dir(0) = p_local(0) > 0 ? -1 : 1;
+		dir(1) = p_local(1) > 0 ? -1 : 1;
+		dir(2) = p_local(2) > 0 ? -1 : 1;
+
+		Eigen::Vector4f target_local;
+		target_local(0) = p_local(0) + dir(0) * diff(0);
+		target_local(1) = p_local(1) + dir(1) * diff(1);
+		target_local(2) = p_local(2) + dir(2) * diff(2);
+		target_local(1) = 1;
+
+		return (T_local * target_local).head(3);
+	}
+
+	return Eigen::Vector3f::Zero();
+}
