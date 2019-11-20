@@ -518,7 +518,7 @@ Eigen::VectorXf RedCube::FindTouchPoint(const Eigen::VectorXf& p)
 		target_local(0) = p_local(0) + dir(0) * diff(0);
 		target_local(1) = p_local(1) + dir(1) * diff(1);
 		target_local(2) = p_local(2) + dir(2) * diff(2);
-		target_local(1) = 1;
+		target_local(3) = 1;
 
 		return (T_local * target_local).head(3);
 	}

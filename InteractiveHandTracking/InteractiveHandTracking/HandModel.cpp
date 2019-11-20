@@ -179,6 +179,8 @@ void HandModel::LoadModel()
 
 	std::string vertices_FittingWeight_filename = ".\\Data\\vertices_FittingWeight.txt";
 	this->Load_Vertices_FittingWeight(vertices_FittingWeight_filename.c_str());
+	std::string contactPoints_filename = ".\\Data\\contactpoints.txt";
+	this->Load_contact_Points(contactPoints_filename.c_str());
 	std::cout << "Load Model success " << std::endl;
 }
 
@@ -531,6 +533,20 @@ void HandModel::Load_Vertices_FittingWeight(const char* filename)
 	f.close();
 
 	std::cout << "Load Vertices_FittingWeight success\n";
+}
+
+void HandModel::Load_contact_Points(const char* filename)
+{
+	std::ifstream f;
+	f.open(filename);
+	if (!f.is_open())  std::cerr << "Load  Load_contact_Points  error,  can not open this file !!! \n";
+
+	contactPoints.resize(Vertex_num);
+	for (int i = 0; i < Vertex_num; ++i)
+		f >> contactPoints[i];
+	f.close();
+
+	std::cout << "Load contact_Points success\n";
 }
 #pragma endregion LoadFunctions
 

@@ -389,6 +389,7 @@ void Worker::Hand_one_tracking()
 	kalman->track(linear_system, Hand_Params.head(NUM_HAND_SHAPE_PARAMS));
 	this->CollisionLimit(linear_system);
 	Hand_Object_Collision(linear_system);
+	Hand_Object_Contact(linear_system);
 	this->Damping(linear_system);
 	if (itr < setting->max_rigid_itr)
 		this->RigidOnly(linear_system);  //���һ��Ҫ�����
@@ -1047,6 +1048,64 @@ void Worker::Hand_Object_Collision(LinearSystem& linear_system)
 		linear_system.lhs.block(NUM_HAND_SHAPE_PARAMS, NUM_HAND_SHAPE_PARAMS,
 			NUM_HAND_POSE_PARAMS, NUM_HAND_POSE_PARAMS) += setting->Hand_object_collision * J.transpose() * J;
 		linear_system.rhs.tail(NUM_HAND_POSE_PARAMS) += setting->Hand_object_collision*J.transpose()*e;
+	}
+}
+
+void Worker::Hand_Object_Contact(LinearSystem& linear_system)
+{
+	const float THRESHOLD = 20.0f;
+	vector<pair<int, Vector3>> hand_obj_contatct;
+
+	for (int v_id = 0; v_id < mHandModel->Vertex_num; ++v_id)
+	{
+		if (mHandModel->contactPoints[v_id] == 1)
+		{
+			for (int obj_idx = 0; obj_idx < mInteracted_Objects.size(); ++obj_idx)
+			{
+				Eigen::Vector3f p(mHandModel->V_Final(v_id, 0), mHandModel->V_Final(v_id, 1), mHandModel->V_Final(v_id, 2));
+				if (!mInteracted_Objects[obj_idx]->Is_inside(p))
+				{
+					Eigen::Vector3f cor = mInteracted_Objects[obj_idx]->FindTouchPoint(p);
+					if ((cor - p).norm() < THRESHOLD)
+					{
+						hand_obj_contatct.emplace_back(make_pair(v_id, cor));
+					}
+				}
+			}
+		}
+	}
+
+	int contact_size = static_cast<int>(hand_obj_contatct.size());
+	if (contact_size > 0)
+	{
+		Eigen::VectorXf e = Eigen::VectorXf::Zero(contact_size * 3);
+		Eigen::MatrixXf J = Eigen::MatrixXf::Zero(contact_size * 3, NUM_HAND_POSE_PARAMS);
+		Eigen::MatrixXf pose_jacob;
+
+		for (int i = 0; i < contact_size; ++i)
+		{
+			int v_id = hand_obj_contatct[i].first;
+
+			e(i * 3 + 0) = (hand_obj_contatct[i].second)(0) - mHandModel->V_Final(v_id, 0);
+			e(i * 3 + 1) = (hand_obj_contatct[i].second)(1) - mHandModel->V_Final(v_id, 1);
+			e(i * 3 + 2) = (hand_obj_contatct[i].second)(2) - mHandModel->V_Final(v_id, 2);
+
+			float distance = sqrt(e(i * 3 + 0)*e(i * 3 + 0) + e(i * 3 + 1)*e(i * 3 + 1) + e(i * 3 + 2)*e(i * 3 + 2));
+			float weight = 1.0f / (1.0f + distance);
+			//weight = 1.0f;
+
+			e(i * 3 + 0) *= weight;
+			e(i * 3 + 1) *= weight;
+			e(i * 3 + 2) *= weight;
+
+			mHandModel->Pose_jacobain(pose_jacob, v_id);
+
+			J.block(i * 3, 0, 3, NUM_HAND_POSE_PARAMS) = weight * pose_jacob;
+		}
+
+		linear_system.lhs.block(NUM_HAND_SHAPE_PARAMS, NUM_HAND_SHAPE_PARAMS,
+			NUM_HAND_POSE_PARAMS, NUM_HAND_POSE_PARAMS) += setting->Hand_object_contact * J.transpose() * J;
+		linear_system.rhs.tail(NUM_HAND_POSE_PARAMS) += setting->Hand_object_contact*J.transpose()*e;
 	}
 }
 

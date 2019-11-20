@@ -314,6 +314,47 @@ namespace DS
 			glPopMatrix();            //弹出矩阵。
 		}
 	}
+
+	void draw_ContactPoint()
+	{
+		vector<pair<int, Vector3>> hand_obj_contatct;
+
+		for (int v_id = 0; v_id < mTrackingManager->mHandModel->Vertex_num; ++v_id)
+		{
+			if (mTrackingManager->mHandModel->contactPoints[v_id] == 1)
+			{
+				for (int obj_idx = 0; obj_idx < mTrackingManager->mInteracted_Object.size(); ++obj_idx)
+				{
+					Eigen::Vector3f p(mTrackingManager->mHandModel->V_Final(v_id, 0), 
+						mTrackingManager->mHandModel->V_Final(v_id, 1), 
+						mTrackingManager->mHandModel->V_Final(v_id, 2));
+					if (!mTrackingManager->mInteracted_Object[obj_idx]->Is_inside(p))
+					{
+						Eigen::Vector3f cor = mTrackingManager->mInteracted_Object[obj_idx]->FindTouchPoint(p);
+						hand_obj_contatct.emplace_back(make_pair(v_id, cor));
+					}
+				}
+			}
+		}
+
+		int size = hand_obj_contatct.size();
+
+		if (size > 0)
+		{
+			glBegin(GL_LINES);
+
+			for (int i = 0; i < size; ++i)
+			{
+				glVertex3f(mTrackingManager->mHandModel->V_Final(hand_obj_contatct[i].first, 0),
+					mTrackingManager->mHandModel->V_Final(hand_obj_contatct[i].first, 1),
+					mTrackingManager->mHandModel->V_Final(hand_obj_contatct[i].first, 2));
+
+				glVertex3f(hand_obj_contatct[i].second(0), hand_obj_contatct[i].second(1), hand_obj_contatct[i].second(2));
+			}
+
+			glEnd();
+		}
+	}
 #pragma endregion SetOfDraw
 	void draw() {
 
@@ -343,10 +384,9 @@ namespace DS
 		gluLookAt(x + control.gx, y + control.gy, z + control.gz, control.gx, control.gy, control.gz, 0.0, 1.0, 0.0);//个人理解最开始是看向-z的，之后的角度是在global中心上叠加的，所以要加
 
 		draw_HandModel();
-		//draw_Interacted_Object();
-		draw_HandPointCloud();
+		draw_Interacted_Object();
+		//draw_HandPointCloud();
 		//draw_HandPointCloudNormal();
-
 		//draw_ObjectCloud();
 		//draw_ObjectCloudNormal();
 		draw_Coordinate();

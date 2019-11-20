@@ -32,6 +32,7 @@ private:
 
 		//交互
 		float Hand_object_collision = 100.0f;
+		float Hand_object_contact = 200.0f;
 
 		int max_itr = 15;
 		int max_rigid_itr = 1;
@@ -109,6 +110,7 @@ private:
 
 	//交互产生的碰撞等
 	void Hand_Object_Collision(LinearSystem& linear_system);
+	void Hand_Object_Contact(LinearSystem& linear_system);
 
 	Eigen::VectorXf Solver(LinearSystem& linear_system);
 	void Evaluation();
