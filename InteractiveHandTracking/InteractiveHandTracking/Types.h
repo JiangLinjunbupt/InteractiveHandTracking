@@ -162,29 +162,27 @@ struct Object_input
 
 	void UpdateStatus(bool is_detect)
 	{
+		pre_detect = now_detect;
+
 		if (is_detect)
 		{
 			not_detect_count = 0;
-			pre_detect = now_detect;
 			now_detect = true;
-
-			if (loss_detect)
-				first_detect = (!pre_detect)&now_detect;
-			else
-				first_detect = false;
-
 			loss_detect = false;
 		}
 		else
 		{
 			not_detect_count++;
-			pre_detect = now_detect;
 			now_detect = false;
-
 			if (not_detect_count > LOSS_DETECT_THRESHOLD)
 				loss_detect = true;
-			first_detect = false;
 		}
+	}
+
+	void ClearPointcloudAndCenter()
+	{
+		pointcloud.points.clear();
+		center.setZero();
 	}
 };
 

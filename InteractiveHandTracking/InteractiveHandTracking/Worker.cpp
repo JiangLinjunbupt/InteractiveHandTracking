@@ -82,13 +82,12 @@ void Worker::Tracking(Image_InputData& imageData, Glove_InputData& gloveData,
 		Hand_one_tracking();
 		for (int obj_idx = 0; obj_idx < mInteracted_Objects.size(); ++obj_idx)
 		{
-			if(!mImage_InputData->item[obj_idx].loss_detect)
+			if(mImage_InputData->item[obj_idx].now_detect)
 				Object_one_tracking(obj_idx);
 		}
 
 		total_itr++;
 	}
-
 	Evaluation();
 }
 void Worker::SetHandInit(Eigen::VectorXf& hand_init, bool pre_success, Eigen::VectorXf& pre_handParams)
@@ -106,17 +105,17 @@ void Worker::SetHandInit(Eigen::VectorXf& hand_init, bool pre_success, Eigen::Ve
 }
 void Worker::SetObjectsInit(vector<Eigen::VectorXf>& object_init, bool pre_success, vector<Eigen::VectorXf>& pre_objectParams)
 {
-	//���֮ǰ���ٳɹ������Ҳ��ǵ�һ�μ�⵽�����壬��ʹ��ǰһ֡�ʵĲ���������ʹ�ó�ʼ����֡��
+	//如果物体第一次出现（或者失去检测后重新出现），或者跟踪失败后，使用图像数据作为初始化
 	for (size_t obj_id = 0; obj_id < mInteracted_Objects.size(); ++obj_id)
 	{
-		if (pre_success && (!mImage_InputData->item[obj_id].first_detect) && mImage_InputData->item[obj_id].now_detect)
+		if ((!pre_success) || mImage_InputData->item[obj_id].first_detect || mImage_InputData->item[obj_id].loss_detect)
 		{
-			Object_params[obj_id] = pre_objectParams[obj_id];
+			Object_params[obj_id] = object_init[obj_id];
 			mInteracted_Objects[obj_id]->Update(Object_params[obj_id]);
 		}
 		else
 		{
-			Object_params[obj_id] = object_init[obj_id];
+			Object_params[obj_id] = pre_objectParams[obj_id];
 			mInteracted_Objects[obj_id]->Update(Object_params[obj_id]);
 		}
 	}
@@ -155,6 +154,12 @@ void Worker::SetTemporalInfo(bool pre_success, Eigen::VectorXf& pre_handPrams, v
 		while (!temporal_Hand_params.empty())
 			temporal_Hand_params.pop();
 	}
+
+	for (int obj_idx = 0; obj_idx < mInteracted_Objects.size(); ++obj_idx)
+	{
+		if (mImage_InputData->item[obj_idx].first_detect || mImage_InputData->item[obj_idx].loss_detect)
+			while (!temporal_Object_params[obj_idx].empty()) temporal_Object_params[obj_idx].pop();
+	}
 }
 
 void Worker::FindObjectCorrespond()
@@ -162,78 +167,80 @@ void Worker::FindObjectCorrespond()
 	for (int obj_id = 0; obj_id < mInteracted_Objects.size(); ++obj_id)
 	{
 		Object_corresponds[obj_id].clear();
-
-		pcl::PointCloud<pcl::PointNormal> object_visible_cloud;
-		std::vector<int> visible_idx;
-		int Maxsize = mInteracted_Objects[obj_id]->Final_Vertices.size();
-
-		object_visible_cloud.reserve(Maxsize);
-		visible_idx.reserve(Maxsize);
-
-		for (int i = 0; i < Maxsize; ++i)
-		{
-			if (mInteracted_Objects[obj_id]->Final_Normal[i].z() < 0)
-			{
-				pcl::PointNormal p;
-				p.x = mInteracted_Objects[obj_id]->Final_Vertices[i](0);
-				p.y = mInteracted_Objects[obj_id]->Final_Vertices[i](1);
-				p.z = mInteracted_Objects[obj_id]->Final_Vertices[i](2);
-
-				p.normal_x = mInteracted_Objects[obj_id]->Final_Normal[i](0);
-				p.normal_y = mInteracted_Objects[obj_id]->Final_Normal[i](1);
-				p.normal_z = mInteracted_Objects[obj_id]->Final_Normal[i](2);
-
-				object_visible_cloud.points.push_back(p);
-				visible_idx.push_back(i);
-			}
-		}
-
-		//Ȼ�����Ҷ�Ӧ��
-		int Numvisible = object_visible_cloud.size();
-		int NumPointCloud_sensor = mImage_InputData->item[obj_id].pointcloud.points.size();
-
-		if (Numvisible > 0 && NumPointCloud_sensor > 0)
-		{
-			Object_corresponds[obj_id].resize(NumPointCloud_sensor);
-			pcl::KdTreeFLANN<pcl::PointNormal> search_tree;
-			search_tree.setInputCloud(object_visible_cloud.makeShared());
-
-			const int k = 1;
-			std::vector<int> k_indices(k);
-			std::vector<float> k_squared_distance(k);
-
-			for (int i = 0; i < NumPointCloud_sensor; ++i)
-			{
-				search_tree.nearestKSearch(mImage_InputData->item[obj_id].pointcloud, i, k, k_indices, k_squared_distance);
-
-				Eigen::Vector3f p = Eigen::Vector3f(mImage_InputData->item[obj_id].pointcloud.points[i].x,
-					mImage_InputData->item[obj_id].pointcloud.points[i].y,
-					mImage_InputData->item[obj_id].pointcloud.points[i].z);
-				Object_corresponds[obj_id][i].pointcloud = p;
-
-
-				Eigen::Vector3f p_cor = Eigen::Vector3f(object_visible_cloud.points[k_indices[0]].x,
-					object_visible_cloud.points[k_indices[0]].y,
-					object_visible_cloud.points[k_indices[0]].z);
-
-				Object_corresponds[obj_id][i].correspond = p_cor;
-				Object_corresponds[obj_id][i].correspond_idx = visible_idx[k_indices[0]];
-
-				float distance = (p_cor - p).norm();
-
-				if (distance > 100)
-					Object_corresponds[obj_id][i].is_match = false;
-				else
-					Object_corresponds[obj_id][i].is_match = true;
-			}
-		}
-
 		num_Object_matched_correspond[obj_id] = 0;
 
-		for (std::vector<DataAndCorrespond>::iterator itr = Object_corresponds[obj_id].begin(); itr != Object_corresponds[obj_id].end(); ++itr)
+		if (mImage_InputData->item[obj_id].now_detect)
 		{
-			if (itr->is_match)
-				++num_Object_matched_correspond[obj_id];
+			pcl::PointCloud<pcl::PointNormal> object_visible_cloud;
+			std::vector<int> visible_idx;
+			int Maxsize = mInteracted_Objects[obj_id]->Final_Vertices.size();
+
+			object_visible_cloud.reserve(Maxsize);
+			visible_idx.reserve(Maxsize);
+
+			for (int i = 0; i < Maxsize; ++i)
+			{
+				if (mInteracted_Objects[obj_id]->Final_Normal[i].z() < 0)
+				{
+					pcl::PointNormal p;
+					p.x = mInteracted_Objects[obj_id]->Final_Vertices[i](0);
+					p.y = mInteracted_Objects[obj_id]->Final_Vertices[i](1);
+					p.z = mInteracted_Objects[obj_id]->Final_Vertices[i](2);
+
+					p.normal_x = mInteracted_Objects[obj_id]->Final_Normal[i](0);
+					p.normal_y = mInteracted_Objects[obj_id]->Final_Normal[i](1);
+					p.normal_z = mInteracted_Objects[obj_id]->Final_Normal[i](2);
+
+					object_visible_cloud.points.push_back(p);
+					visible_idx.push_back(i);
+				}
+			}
+
+			//Ȼ�����Ҷ�Ӧ��
+			int Numvisible = object_visible_cloud.size();
+			int NumPointCloud_sensor = mImage_InputData->item[obj_id].pointcloud.points.size();
+
+			if (Numvisible > 0 && NumPointCloud_sensor > 0)
+			{
+				Object_corresponds[obj_id].resize(NumPointCloud_sensor);
+				pcl::KdTreeFLANN<pcl::PointNormal> search_tree;
+				search_tree.setInputCloud(object_visible_cloud.makeShared());
+
+				const int k = 1;
+				std::vector<int> k_indices(k);
+				std::vector<float> k_squared_distance(k);
+
+				for (int i = 0; i < NumPointCloud_sensor; ++i)
+				{
+					search_tree.nearestKSearch(mImage_InputData->item[obj_id].pointcloud, i, k, k_indices, k_squared_distance);
+
+					Eigen::Vector3f p = Eigen::Vector3f(mImage_InputData->item[obj_id].pointcloud.points[i].x,
+						mImage_InputData->item[obj_id].pointcloud.points[i].y,
+						mImage_InputData->item[obj_id].pointcloud.points[i].z);
+					Object_corresponds[obj_id][i].pointcloud = p;
+
+
+					Eigen::Vector3f p_cor = Eigen::Vector3f(object_visible_cloud.points[k_indices[0]].x,
+						object_visible_cloud.points[k_indices[0]].y,
+						object_visible_cloud.points[k_indices[0]].z);
+
+					Object_corresponds[obj_id][i].correspond = p_cor;
+					Object_corresponds[obj_id][i].correspond_idx = visible_idx[k_indices[0]];
+
+					float distance = (p_cor - p).norm();
+
+					if (distance > 100)
+						Object_corresponds[obj_id][i].is_match = false;
+					else
+						Object_corresponds[obj_id][i].is_match = true;
+				}
+			}
+
+			for (std::vector<DataAndCorrespond>::iterator itr = Object_corresponds[obj_id].begin(); itr != Object_corresponds[obj_id].end(); ++itr)
+			{
+				if (itr->is_match)
+					++num_Object_matched_correspond[obj_id];
+			}
 		}
 	}
 }
@@ -1015,11 +1022,14 @@ void Worker::Hand_Object_Collision(LinearSystem& linear_system)
 	{
 		for (int obj_idx = 0; obj_idx < mInteracted_Objects.size(); ++obj_idx)
 		{
-			Eigen::Vector3f p(mHandModel->V_Final(v_id, 0), mHandModel->V_Final(v_id, 1), mHandModel->V_Final(v_id, 2));
-			if (mInteracted_Objects[obj_idx]->Is_inside(p))
+			if (!mImage_InputData->item[obj_idx].loss_detect)
 			{
-				Eigen::Vector3f cor = mInteracted_Objects[obj_idx]->FindTarget(p);
-				hand_obj_col.emplace_back(make_pair(v_id, cor));
+				Eigen::Vector3f p(mHandModel->V_Final(v_id, 0), mHandModel->V_Final(v_id, 1), mHandModel->V_Final(v_id, 2));
+				if (mInteracted_Objects[obj_idx]->Is_inside(p))
+				{
+					Eigen::Vector3f cor = mInteracted_Objects[obj_idx]->FindTarget(p);
+					hand_obj_col.emplace_back(make_pair(v_id, cor));
+				}
 			}
 		}
 	}
@@ -1062,13 +1072,16 @@ void Worker::Hand_Object_Contact(LinearSystem& linear_system)
 		{
 			for (int obj_idx = 0; obj_idx < mInteracted_Objects.size(); ++obj_idx)
 			{
-				Eigen::Vector3f p(mHandModel->V_Final(v_id, 0), mHandModel->V_Final(v_id, 1), mHandModel->V_Final(v_id, 2));
-				if (!mInteracted_Objects[obj_idx]->Is_inside(p))
+				if (!mImage_InputData->item[obj_idx].loss_detect)
 				{
-					Eigen::Vector3f cor = mInteracted_Objects[obj_idx]->FindTouchPoint(p);
-					if ((cor - p).norm() < THRESHOLD)
+					Eigen::Vector3f p(mHandModel->V_Final(v_id, 0), mHandModel->V_Final(v_id, 1), mHandModel->V_Final(v_id, 2));
+					if (!mInteracted_Objects[obj_idx]->Is_inside(p))
 					{
-						hand_obj_contatct.emplace_back(make_pair(v_id, cor));
+						Eigen::Vector3f cor = mInteracted_Objects[obj_idx]->FindTouchPoint(p);
+						if ((cor - p).norm() < THRESHOLD)
+						{
+							hand_obj_contatct.emplace_back(make_pair(v_id, cor));
+						}
 					}
 				}
 			}

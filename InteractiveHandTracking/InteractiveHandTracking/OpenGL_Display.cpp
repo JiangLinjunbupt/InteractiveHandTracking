@@ -231,87 +231,93 @@ namespace DS
 		glEnable(GL_LIGHTING);
 		for (size_t obj_idx = 0; obj_idx < mTrackingManager->mInteracted_Object.size(); ++obj_idx)
 		{
-			GLfloat Sphere_ambient[] = { mTrackingManager->mInteracted_Object[obj_idx]->mObject_attribute.color(0),
-				mTrackingManager->mInteracted_Object[obj_idx]->mObject_attribute.color(1),
-				mTrackingManager->mInteracted_Object[obj_idx]->mObject_attribute.color(2),1 };
-			GLfloat Sphere_specular[] = { 0.5, 0.5, 0.5, 1.0 };
-			GLfloat Sphere_shin[] = { 10 };
-			glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, Sphere_ambient);
-			glMaterialfv(GL_FRONT, GL_SPECULAR, Sphere_specular);
-			glMaterialfv(GL_FRONT, GL_SHININESS, Sphere_shin);
-
-			if (!mTrackingManager->mInteracted_Object[obj_idx]->Final_Vertices.empty())
+			if (mTrackingManager->mInputManager->mInputData.image_data.item[obj_idx].now_detect)
 			{
-				int face_size = mTrackingManager->mInteracted_Object[obj_idx]->Face_idx.size();
-				glBegin(GL_TRIANGLES);
-				for (size_t i = 0; i < face_size; ++i)
+				GLfloat Sphere_ambient[] = { mTrackingManager->mInteracted_Object[obj_idx]->mObject_attribute.color(0),
+					mTrackingManager->mInteracted_Object[obj_idx]->mObject_attribute.color(1),
+					mTrackingManager->mInteracted_Object[obj_idx]->mObject_attribute.color(2),1 };
+				GLfloat Sphere_specular[] = { 0.5, 0.5, 0.5, 1.0 };
+				GLfloat Sphere_shin[] = { 10 };
+				glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, Sphere_ambient);
+				glMaterialfv(GL_FRONT, GL_SPECULAR, Sphere_specular);
+				glMaterialfv(GL_FRONT, GL_SHININESS, Sphere_shin);
+
+				if (!mTrackingManager->mInteracted_Object[obj_idx]->Final_Vertices.empty())
 				{
-					int idx_1 = mTrackingManager->mInteracted_Object[obj_idx]->Face_idx[i](0);
-					int idx_2 = mTrackingManager->mInteracted_Object[obj_idx]->Face_idx[i](1);
-					int idx_3 = mTrackingManager->mInteracted_Object[obj_idx]->Face_idx[i](2);
+					int face_size = mTrackingManager->mInteracted_Object[obj_idx]->Face_idx.size();
+					glBegin(GL_TRIANGLES);
+					for (size_t i = 0; i < face_size; ++i)
+					{
+						int idx_1 = mTrackingManager->mInteracted_Object[obj_idx]->Face_idx[i](0);
+						int idx_2 = mTrackingManager->mInteracted_Object[obj_idx]->Face_idx[i](1);
+						int idx_3 = mTrackingManager->mInteracted_Object[obj_idx]->Face_idx[i](2);
 
-					glNormal3f(mTrackingManager->mInteracted_Object[obj_idx]->Final_Normal[idx_1](0),
-						mTrackingManager->mInteracted_Object[obj_idx]->Final_Normal[idx_1](1),
-						mTrackingManager->mInteracted_Object[obj_idx]->Final_Normal[idx_1](2));
-					glVertex3f(mTrackingManager->mInteracted_Object[obj_idx]->Final_Vertices[idx_1](0),
-						mTrackingManager->mInteracted_Object[obj_idx]->Final_Vertices[idx_1](1),
-						mTrackingManager->mInteracted_Object[obj_idx]->Final_Vertices[idx_1](2));
+						glNormal3f(mTrackingManager->mInteracted_Object[obj_idx]->Final_Normal[idx_1](0),
+							mTrackingManager->mInteracted_Object[obj_idx]->Final_Normal[idx_1](1),
+							mTrackingManager->mInteracted_Object[obj_idx]->Final_Normal[idx_1](2));
+						glVertex3f(mTrackingManager->mInteracted_Object[obj_idx]->Final_Vertices[idx_1](0),
+							mTrackingManager->mInteracted_Object[obj_idx]->Final_Vertices[idx_1](1),
+							mTrackingManager->mInteracted_Object[obj_idx]->Final_Vertices[idx_1](2));
 
-					glNormal3f(mTrackingManager->mInteracted_Object[obj_idx]->Final_Normal[idx_2](0),
-						mTrackingManager->mInteracted_Object[obj_idx]->Final_Normal[idx_2](1),
-						mTrackingManager->mInteracted_Object[obj_idx]->Final_Normal[idx_2](2));
-					glVertex3f(mTrackingManager->mInteracted_Object[obj_idx]->Final_Vertices[idx_2](0),
-						mTrackingManager->mInteracted_Object[obj_idx]->Final_Vertices[idx_2](1),
-						mTrackingManager->mInteracted_Object[obj_idx]->Final_Vertices[idx_2](2));
+						glNormal3f(mTrackingManager->mInteracted_Object[obj_idx]->Final_Normal[idx_2](0),
+							mTrackingManager->mInteracted_Object[obj_idx]->Final_Normal[idx_2](1),
+							mTrackingManager->mInteracted_Object[obj_idx]->Final_Normal[idx_2](2));
+						glVertex3f(mTrackingManager->mInteracted_Object[obj_idx]->Final_Vertices[idx_2](0),
+							mTrackingManager->mInteracted_Object[obj_idx]->Final_Vertices[idx_2](1),
+							mTrackingManager->mInteracted_Object[obj_idx]->Final_Vertices[idx_2](2));
 
-					glNormal3f(mTrackingManager->mInteracted_Object[obj_idx]->Final_Normal[idx_3](0),
-						mTrackingManager->mInteracted_Object[obj_idx]->Final_Normal[idx_3](1),
-						mTrackingManager->mInteracted_Object[obj_idx]->Final_Normal[idx_3](2));
-					glVertex3f(mTrackingManager->mInteracted_Object[obj_idx]->Final_Vertices[idx_3](0),
-						mTrackingManager->mInteracted_Object[obj_idx]->Final_Vertices[idx_3](1),
-						mTrackingManager->mInteracted_Object[obj_idx]->Final_Vertices[idx_3](2));
+						glNormal3f(mTrackingManager->mInteracted_Object[obj_idx]->Final_Normal[idx_3](0),
+							mTrackingManager->mInteracted_Object[obj_idx]->Final_Normal[idx_3](1),
+							mTrackingManager->mInteracted_Object[obj_idx]->Final_Normal[idx_3](2));
+						glVertex3f(mTrackingManager->mInteracted_Object[obj_idx]->Final_Vertices[idx_3](0),
+							mTrackingManager->mInteracted_Object[obj_idx]->Final_Vertices[idx_3](1),
+							mTrackingManager->mInteracted_Object[obj_idx]->Final_Vertices[idx_3](2));
+					}
+					glEnd();
 				}
-				glEnd();
 			}
 		}
 	}
 	void draw_HandModel()
 	{
-		glEnable(GL_LIGHTING);
-		glEnable(GL_LIGHT0);
+		if (mTrackingManager->mInputManager->mInputData.image_data.hand.now_detect)
 		{
-			glPushMatrix();
-
-			GLfloat mat_ambient[] = { 0.05, 0.05, 0.0, 1.0 };
-			GLfloat mat_diffuse[] = { 0.5, 0.4,0.4, 1.0 };
-			GLfloat mat_specular[] = { 0.7, 0.04, 0.04, 1.0 };
-			GLfloat no_shininess[] = { 0.78125 };
-
-			glMaterialfv(GL_FRONT, GL_AMBIENT, mat_ambient);
-			glMaterialfv(GL_FRONT, GL_DIFFUSE, mat_diffuse);
-			glMaterialfv(GL_FRONT, GL_SPECULAR, mat_specular);
-			glMaterialfv(GL_FRONT, GL_SHININESS, no_shininess);
-
-			glBegin(GL_TRIANGLES);
-			for (int i = 0; i < mTrackingManager->mHandModel->Face_num; ++i)
+			glEnable(GL_LIGHTING);
+			glEnable(GL_LIGHT0);
 			{
+				glPushMatrix();
 
-				glNormal3f(mTrackingManager->mHandModel->F_normal(i, 0), mTrackingManager->mHandModel->F_normal(i, 1), mTrackingManager->mHandModel->F_normal(i, 2));
+				GLfloat mat_ambient[] = { 0.05, 0.05, 0.0, 1.0 };
+				GLfloat mat_diffuse[] = { 0.5, 0.4,0.4, 1.0 };
+				GLfloat mat_specular[] = { 0.7, 0.04, 0.04, 1.0 };
+				GLfloat no_shininess[] = { 0.78125 };
 
-				glVertex3f(mTrackingManager->mHandModel->V_Final(mTrackingManager->mHandModel->F(i, 0), 0),
-					mTrackingManager->mHandModel->V_Final(mTrackingManager->mHandModel->F(i, 0), 1),
-					mTrackingManager->mHandModel->V_Final(mTrackingManager->mHandModel->F(i, 0), 2));
+				glMaterialfv(GL_FRONT, GL_AMBIENT, mat_ambient);
+				glMaterialfv(GL_FRONT, GL_DIFFUSE, mat_diffuse);
+				glMaterialfv(GL_FRONT, GL_SPECULAR, mat_specular);
+				glMaterialfv(GL_FRONT, GL_SHININESS, no_shininess);
 
-				glVertex3f(mTrackingManager->mHandModel->V_Final(mTrackingManager->mHandModel->F(i, 1), 0),
-					mTrackingManager->mHandModel->V_Final(mTrackingManager->mHandModel->F(i, 1), 1),
-					mTrackingManager->mHandModel->V_Final(mTrackingManager->mHandModel->F(i, 1), 2));
+				glBegin(GL_TRIANGLES);
+				for (int i = 0; i < mTrackingManager->mHandModel->Face_num; ++i)
+				{
 
-				glVertex3f(mTrackingManager->mHandModel->V_Final(mTrackingManager->mHandModel->F(i, 2), 0),
-					mTrackingManager->mHandModel->V_Final(mTrackingManager->mHandModel->F(i, 2), 1),
-					mTrackingManager->mHandModel->V_Final(mTrackingManager->mHandModel->F(i, 2), 2));
+					glNormal3f(mTrackingManager->mHandModel->F_normal(i, 0), mTrackingManager->mHandModel->F_normal(i, 1), mTrackingManager->mHandModel->F_normal(i, 2));
+
+					glVertex3f(mTrackingManager->mHandModel->V_Final(mTrackingManager->mHandModel->F(i, 0), 0),
+						mTrackingManager->mHandModel->V_Final(mTrackingManager->mHandModel->F(i, 0), 1),
+						mTrackingManager->mHandModel->V_Final(mTrackingManager->mHandModel->F(i, 0), 2));
+
+					glVertex3f(mTrackingManager->mHandModel->V_Final(mTrackingManager->mHandModel->F(i, 1), 0),
+						mTrackingManager->mHandModel->V_Final(mTrackingManager->mHandModel->F(i, 1), 1),
+						mTrackingManager->mHandModel->V_Final(mTrackingManager->mHandModel->F(i, 1), 2));
+
+					glVertex3f(mTrackingManager->mHandModel->V_Final(mTrackingManager->mHandModel->F(i, 2), 0),
+						mTrackingManager->mHandModel->V_Final(mTrackingManager->mHandModel->F(i, 2), 1),
+						mTrackingManager->mHandModel->V_Final(mTrackingManager->mHandModel->F(i, 2), 2));
+				}
+				glEnd();
+				glPopMatrix();            //µ¯³ö¾ØÕó¡£
 			}
-			glEnd();
-			glPopMatrix();            //µ¯³ö¾ØÕó¡£
 		}
 	}
 
@@ -385,9 +391,9 @@ namespace DS
 
 		draw_HandModel();
 		draw_Interacted_Object();
-		//draw_HandPointCloud();
+		draw_HandPointCloud();
 		//draw_HandPointCloudNormal();
-		//draw_ObjectCloud();
+		draw_ObjectCloud();
 		//draw_ObjectCloudNormal();
 		draw_Coordinate();
 

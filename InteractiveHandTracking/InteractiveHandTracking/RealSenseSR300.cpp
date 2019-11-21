@@ -411,7 +411,7 @@ void RealSenseSensor::SegObject(cv::Mat& depth, cv::Mat& hsv)
 			object_hmax = 100; object_smax = 255; object_vmax = 255;
 			break;
 		case redCube:
-			object_hmin = 300; object_smin = 110; object_vmin = 80;
+			object_hmin = 300; object_smin = 130; object_vmin = 80;
 			object_hmax = 360; object_smax = 255; object_vmax = 255;
 			break;
 		default:
@@ -429,7 +429,7 @@ void RealSenseSensor::SegObject(cv::Mat& depth, cv::Mat& hsv)
 		//cv::Mat element = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(2 * Object_DILATION_SIZE + 1, 2 * Object_DILATION_SIZE + 1));
 		//cv::dilate(objectMask, objectMask, element);
 
-		if (cv::countNonZero(m_Image_InputData[BACK_BUFFER].item[obj_id].silhouette) > 30)
+		if (cv::countNonZero(m_Image_InputData[BACK_BUFFER].item[obj_id].silhouette) > 100)
 			m_Image_InputData[BACK_BUFFER].item[obj_id].UpdateStatus(true);
 		else
 			m_Image_InputData[BACK_BUFFER].item[obj_id].UpdateStatus(false);
@@ -636,7 +636,7 @@ void RealSenseSensor::SegHand(cv::Mat& depth, cv::Mat& hsv, cv::Mat& HandSegFrom
 	if (is_handSegFromRealsense) mask.setTo(255, HandSegFromRealSense == 255);
 	mask.copyTo(m_Image_InputData[BACK_BUFFER].hand.silhouette);
 
-	if (cv::countNonZero(m_Image_InputData[BACK_BUFFER].hand.silhouette) > 50)
+	if (cv::countNonZero(m_Image_InputData[BACK_BUFFER].hand.silhouette) > 400)
 		m_Image_InputData[BACK_BUFFER].hand.UpdateStatus(true);
 	else
 		m_Image_InputData[BACK_BUFFER].hand.UpdateStatus(false);
@@ -653,9 +653,12 @@ void RealSenseSensor::SegObjectAndHand(cv::Mat& HandSegFromRealSense, cv::Mat& o
 	//物体分割后，需要将物体的深度值再深度图中去掉，并且也要从realsense得到的轮廓中去除该物体
 	for (size_t obj_id = 0; obj_id < mObject_type.size(); ++obj_id)
 	{
-		depth_for_seg.setTo(cv::Scalar(BACKGROUND_DEPTH), m_Image_InputData[BACK_BUFFER].item[obj_id].silhouette == 255);
-		if (is_handSegFromRealsense)
-			HandSegFromRealSense.setTo(0, m_Image_InputData[BACK_BUFFER].item[obj_id].silhouette == 255);
+		if (m_Image_InputData[BACK_BUFFER].item[obj_id].now_detect)
+		{
+			depth_for_seg.setTo(cv::Scalar(BACKGROUND_DEPTH), m_Image_InputData[BACK_BUFFER].item[obj_id].silhouette == 255);
+			if (is_handSegFromRealsense)
+				HandSegFromRealSense.setTo(0, m_Image_InputData[BACK_BUFFER].item[obj_id].silhouette == 255);
+		}
 	}
 	//然后再进行人手分割
 	SegHand(depth_for_seg, hsv, HandSegFromRealSense, is_handSegFromRealsense);
@@ -664,178 +667,173 @@ void RealSenseSensor::SegObjectAndHand(cv::Mat& HandSegFromRealSense, cv::Mat& o
 void RealSenseSensor::DepthToPointCloud(Image_InputData& image_inputData)
 {
 	for(int obj_id = 0; obj_id<mObject_type.size();++obj_id)
-		image_inputData.item[obj_id].pointcloud.points.clear();
-	image_inputData.hand.pointcloud.points.clear();
+		image_inputData.item[obj_id].ClearPointcloudAndCenter();
+	image_inputData.hand.ClearPointcloudAndCenter();
 
 	int cols = image_inputData.depth.cols;
 	int rows = image_inputData.depth.rows;
 	Vector3 v0, v1, v2, v3, v4, v5, v6, v7, v8;
 	Vector3 vn1, vn2, vn3, vn4, vn5, vn6, vn7, vn8;
 	
-	//寻找物体和人手的最小内接圆，用这个内接圆内的数据计算位置
-	vector<float> Object_InscribCircleradius; vector<Vector2> Object_InscribCirclecenter;
-	for (int obj_id = 0; obj_id < mObject_type.size(); ++obj_id)
+	//对人手处理
+	if (image_inputData.hand.now_detect)
 	{
-		float InscribCircleradius = 0; Vector2 InscribCirclecenter = Vector2::Zero();
-		FindInscribedCircle(image_inputData.item[obj_id].silhouette, InscribCircleradius, InscribCirclecenter);
-		Object_InscribCircleradius.emplace_back(InscribCircleradius);
-		Object_InscribCirclecenter.emplace_back(InscribCirclecenter);
-	}
-	float Hand_InscribCircleradius = 0; Vector2 Hand_InscribCirclecenter = Vector2::Zero();
-	FindInscribedCircle(image_inputData.hand.silhouette, Hand_InscribCircleradius, Hand_InscribCirclecenter);
+		float Hand_InscribCircleradius = 0; Vector2 Hand_InscribCirclecenter = Vector2::Zero();
+		FindInscribedCircle(image_inputData.hand.silhouette, Hand_InscribCircleradius, Hand_InscribCirclecenter);
 
-	//下采样率：
-	int DownSampleRate;
-	int NonZero = cv::countNonZero(image_inputData.silhouette);
-	if (NonZero > MaxPixelNUM)
-		DownSampleRate = sqrt(NonZero / MaxPixelNUM);
-	else
-		DownSampleRate = 1;
+		//下采样率：
+		int DownSampleRate;
+		int NonZero = cv::countNonZero(image_inputData.silhouette);
+		if (NonZero > MaxPixelNUM)
+			DownSampleRate = sqrt(NonZero / MaxPixelNUM);
+		else
+			DownSampleRate = 1;
 
-	Vector3 hand_center = Vector3::Zero();
-	int hand_count = 0;
+		Vector3 hand_center = Vector3::Zero();
+		int hand_count = 0;
 
-	for(int row = 1;row<rows-1;row += DownSampleRate)
-		for (int col = 1; col < cols-1; col += DownSampleRate) {
-			//对人手分别处理
-			if (image_inputData.hand.silhouette.at<uchar>(row, col) == 255)
-			{
-				v0 = camera->depth_to_world(col, row, image_inputData.depth.at<ushort>(row, col));
-
-				v1 = camera->depth_to_world(col - 1, row - 1, image_inputData.depth.at<ushort>(row - 1, col - 1));
-				v2 = camera->depth_to_world(col + 0, row - 1, image_inputData.depth.at<ushort>(row - 1, col + 0));
-				v3 = camera->depth_to_world(col + 1, row - 1, image_inputData.depth.at<ushort>(row - 1, col + 1));
-				v4 = camera->depth_to_world(col + 1, row + 0, image_inputData.depth.at<ushort>(row + 0, col + 1));
-				v5 = camera->depth_to_world(col + 1, row + 1, image_inputData.depth.at<ushort>(row + 1, col + 1));
-				v6 = camera->depth_to_world(col + 0, row + 1, image_inputData.depth.at<ushort>(row + 1, col + 0));
-				v7 = camera->depth_to_world(col - 1, row + 1, image_inputData.depth.at<ushort>(row + 1, col - 1));
-				v8 = camera->depth_to_world(col - 1, row + 0, image_inputData.depth.at<ushort>(row + 0, col - 1));
-
-				v1 = v1 - v0;
-				v2 = v2 - v0;
-				v3 = v3 - v0;
-				v4 = v4 - v0;
-				v5 = v5 - v0;
-				v6 = v6 - v0;
-				v7 = v7 - v0;
-				v8 = v8 - v0;
-
-				vn1 = v1.cross(v2); vn1.normalize();
-				vn2 = v2.cross(v3); vn2.normalize();
-				vn3 = v3.cross(v4); vn3.normalize();
-				vn4 = v4.cross(v5); vn4.normalize();
-
-				vn5 = v5.cross(v6); vn5.normalize();
-				vn6 = v6.cross(v7); vn6.normalize();
-				vn7 = v7.cross(v8); vn7.normalize();
-				vn8 = v8.cross(v1); vn8.normalize();
-
-				vn1 = vn1 + vn2 + vn3 + vn4 + vn5 + vn6 + vn7 + vn8;
-				vn1.normalize();
-				if (vn1.z() > 0) vn1 = -vn1;
-
-				pcl::PointNormal p;
-				p.x = v0.x();
-				p.y = v0.y();
-				p.z = v0.z();
-				p.normal_x = vn1.x();
-				p.normal_y = vn1.y();
-				p.normal_z = vn1.z();
-
-				image_inputData.hand.pointcloud.points.emplace_back(p);
-
-				float distance = (row - Hand_InscribCirclecenter.y())*(row - Hand_InscribCirclecenter.y()) +
-					(col - Hand_InscribCirclecenter.x())*(col - Hand_InscribCirclecenter.x());
-
-				if (distance < Hand_InscribCircleradius*Hand_InscribCircleradius)
+		for (int row = 1; row<rows - 1; row += DownSampleRate)
+			for (int col = 1; col < cols - 1; col += DownSampleRate) {
+				//对人手分别处理
+				if (image_inputData.hand.silhouette.at<uchar>(row, col) == 255)
 				{
-					hand_center += v0;
-					hand_count++;
+					v0 = camera->depth_to_world(col, row, image_inputData.depth.at<ushort>(row, col));
+
+					v1 = camera->depth_to_world(col - 1, row - 1, image_inputData.depth.at<ushort>(row - 1, col - 1));
+					v2 = camera->depth_to_world(col + 0, row - 1, image_inputData.depth.at<ushort>(row - 1, col + 0));
+					v3 = camera->depth_to_world(col + 1, row - 1, image_inputData.depth.at<ushort>(row - 1, col + 1));
+					v4 = camera->depth_to_world(col + 1, row + 0, image_inputData.depth.at<ushort>(row + 0, col + 1));
+					v5 = camera->depth_to_world(col + 1, row + 1, image_inputData.depth.at<ushort>(row + 1, col + 1));
+					v6 = camera->depth_to_world(col + 0, row + 1, image_inputData.depth.at<ushort>(row + 1, col + 0));
+					v7 = camera->depth_to_world(col - 1, row + 1, image_inputData.depth.at<ushort>(row + 1, col - 1));
+					v8 = camera->depth_to_world(col - 1, row + 0, image_inputData.depth.at<ushort>(row + 0, col - 1));
+
+					v1 = v1 - v0;
+					v2 = v2 - v0;
+					v3 = v3 - v0;
+					v4 = v4 - v0;
+					v5 = v5 - v0;
+					v6 = v6 - v0;
+					v7 = v7 - v0;
+					v8 = v8 - v0;
+
+					vn1 = v1.cross(v2); vn1.normalize();
+					vn2 = v2.cross(v3); vn2.normalize();
+					vn3 = v3.cross(v4); vn3.normalize();
+					vn4 = v4.cross(v5); vn4.normalize();
+
+					vn5 = v5.cross(v6); vn5.normalize();
+					vn6 = v6.cross(v7); vn6.normalize();
+					vn7 = v7.cross(v8); vn7.normalize();
+					vn8 = v8.cross(v1); vn8.normalize();
+
+					vn1 = vn1 + vn2 + vn3 + vn4 + vn5 + vn6 + vn7 + vn8;
+					vn1.normalize();
+					if (vn1.z() > 0) vn1 = -vn1;
+
+					pcl::PointNormal p;
+					p.x = v0.x();
+					p.y = v0.y();
+					p.z = v0.z();
+					p.normal_x = vn1.x();
+					p.normal_y = vn1.y();
+					p.normal_z = vn1.z();
+
+					image_inputData.hand.pointcloud.points.emplace_back(p);
+
+					float distance = (row - Hand_InscribCirclecenter.y())*(row - Hand_InscribCirclecenter.y()) +
+						(col - Hand_InscribCirclecenter.x())*(col - Hand_InscribCirclecenter.x());
+
+					if (distance < Hand_InscribCircleradius*Hand_InscribCircleradius)
+					{
+						hand_center += v0;
+						hand_count++;
+					}
 				}
 			}
-		}
 
-	if (hand_count > 0) hand_center /= hand_count;
-	image_inputData.hand.center = hand_center;
-
-	vector<Vector3> object_center;
-	vector<int> object_count;
-
-	for (int i = 0; i < mObject_type.size(); ++i)
-	{
-		object_center.emplace_back(Vector3::Zero());
-		object_count.emplace_back(0);
+		if (hand_count > 0) hand_center /= hand_count;
+		image_inputData.hand.center = hand_center;
 	}
-	int ObjectDownSampleRate = 3;
-	for (int row = 1; row<rows - 1; row += ObjectDownSampleRate)
-		for (int col = 1; col < cols - 1; col += ObjectDownSampleRate) {
-			//对物体处理
-			for (int obj_id = 0; obj_id < mObject_type.size(); ++obj_id)
-			{
-				if (image_inputData.item[obj_id].silhouette.at<uchar>(row, col) != 255)
-					continue;
 
-				v0 = camera->depth_to_world(col, row, image_inputData.depth.at<ushort>(row, col));
-
-				v1 = camera->depth_to_world(col - 1, row - 1, image_inputData.depth.at<ushort>(row - 1, col - 1));
-				v2 = camera->depth_to_world(col + 0, row - 1, image_inputData.depth.at<ushort>(row - 1, col + 0));
-				v3 = camera->depth_to_world(col + 1, row - 1, image_inputData.depth.at<ushort>(row - 1, col + 1));
-				v4 = camera->depth_to_world(col + 1, row + 0, image_inputData.depth.at<ushort>(row + 0, col + 1));
-				v5 = camera->depth_to_world(col + 1, row + 1, image_inputData.depth.at<ushort>(row + 1, col + 1));
-				v6 = camera->depth_to_world(col + 0, row + 1, image_inputData.depth.at<ushort>(row + 1, col + 0));
-				v7 = camera->depth_to_world(col - 1, row + 1, image_inputData.depth.at<ushort>(row + 1, col - 1));
-				v8 = camera->depth_to_world(col - 1, row + 0, image_inputData.depth.at<ushort>(row + 0, col - 1));
-
-				v1 = v1 - v0;
-				v2 = v2 - v0;
-				v3 = v3 - v0;
-				v4 = v4 - v0;
-				v5 = v5 - v0;
-				v6 = v6 - v0;
-				v7 = v7 - v0;
-				v8 = v8 - v0;
-
-				vn1 = v1.cross(v2); vn1.normalize();
-				vn2 = v2.cross(v3); vn2.normalize();
-				vn3 = v3.cross(v4); vn3.normalize();
-				vn4 = v4.cross(v5); vn4.normalize();
-
-				vn5 = v5.cross(v6); vn5.normalize();
-				vn6 = v6.cross(v7); vn6.normalize();
-				vn7 = v7.cross(v8); vn7.normalize();
-				vn8 = v8.cross(v1); vn8.normalize();
-
-				vn1 = vn1 + vn2 + vn3 + vn4 + vn5 + vn6 + vn7 + vn8;
-				vn1.normalize();
-				if (vn1.z() > 0) vn1 = -vn1;
-
-				pcl::PointNormal p;
-				p.x = v0.x();
-				p.y = v0.y();
-				p.z = v0.z();
-				p.normal_x = vn1.x();
-				p.normal_y = vn1.y();
-				p.normal_z = vn1.z();
-
-				image_inputData.item[obj_id].pointcloud.points.emplace_back(p);
-
-				float distance = (row - Object_InscribCirclecenter[obj_id].y())*(row - Object_InscribCirclecenter[obj_id].y()) +
-					(col - Object_InscribCirclecenter[obj_id].x())*(col - Object_InscribCirclecenter[obj_id].x());
-
-				if (distance < Object_InscribCircleradius[obj_id] * Object_InscribCircleradius[obj_id])
-				{
-					object_center[obj_id] += v0;
-					object_count[obj_id]++;
-				}
-			}
-		}
-
+	//对物体处理
 	for (int obj_id = 0; obj_id < mObject_type.size(); ++obj_id)
 	{
-		if (object_count[obj_id] > 0)
+		if (image_inputData.item[obj_id].now_detect)
 		{
-			object_center[obj_id] /= object_count[obj_id];
-			image_inputData.item[obj_id].center = object_center[obj_id];
+			float Obj_InscribCircleradius = 0; Vector2 Obj_InscribCirclecenter = Vector2::Zero();
+			FindInscribedCircle(image_inputData.item[obj_id].silhouette, Obj_InscribCircleradius, Obj_InscribCirclecenter);
+
+			int ObjectDownSampleRate = 3;
+
+			Vector3 object_center = Vector3::Zero();;
+			int object_count = 0;
+
+			for (int row = 1; row < rows - 1; row += ObjectDownSampleRate)
+				for (int col = 1; col < cols - 1; col += ObjectDownSampleRate) {
+					//对物体处理
+					if (image_inputData.item[obj_id].silhouette.at<uchar>(row, col) != 255)
+						continue;
+
+					v0 = camera->depth_to_world(col, row, image_inputData.depth.at<ushort>(row, col));
+
+					v1 = camera->depth_to_world(col - 1, row - 1, image_inputData.depth.at<ushort>(row - 1, col - 1));
+					v2 = camera->depth_to_world(col + 0, row - 1, image_inputData.depth.at<ushort>(row - 1, col + 0));
+					v3 = camera->depth_to_world(col + 1, row - 1, image_inputData.depth.at<ushort>(row - 1, col + 1));
+					v4 = camera->depth_to_world(col + 1, row + 0, image_inputData.depth.at<ushort>(row + 0, col + 1));
+					v5 = camera->depth_to_world(col + 1, row + 1, image_inputData.depth.at<ushort>(row + 1, col + 1));
+					v6 = camera->depth_to_world(col + 0, row + 1, image_inputData.depth.at<ushort>(row + 1, col + 0));
+					v7 = camera->depth_to_world(col - 1, row + 1, image_inputData.depth.at<ushort>(row + 1, col - 1));
+					v8 = camera->depth_to_world(col - 1, row + 0, image_inputData.depth.at<ushort>(row + 0, col - 1));
+
+					v1 = v1 - v0;
+					v2 = v2 - v0;
+					v3 = v3 - v0;
+					v4 = v4 - v0;
+					v5 = v5 - v0;
+					v6 = v6 - v0;
+					v7 = v7 - v0;
+					v8 = v8 - v0;
+
+					vn1 = v1.cross(v2); vn1.normalize();
+					vn2 = v2.cross(v3); vn2.normalize();
+					vn3 = v3.cross(v4); vn3.normalize();
+					vn4 = v4.cross(v5); vn4.normalize();
+
+					vn5 = v5.cross(v6); vn5.normalize();
+					vn6 = v6.cross(v7); vn6.normalize();
+					vn7 = v7.cross(v8); vn7.normalize();
+					vn8 = v8.cross(v1); vn8.normalize();
+
+					vn1 = vn1 + vn2 + vn3 + vn4 + vn5 + vn6 + vn7 + vn8;
+					vn1.normalize();
+					if (vn1.z() > 0) vn1 = -vn1;
+
+					pcl::PointNormal p;
+					p.x = v0.x();
+					p.y = v0.y();
+					p.z = v0.z();
+					p.normal_x = vn1.x();
+					p.normal_y = vn1.y();
+					p.normal_z = vn1.z();
+
+					image_inputData.item[obj_id].pointcloud.points.emplace_back(p);
+
+					float distance = (row - Obj_InscribCirclecenter.y())*(row - Obj_InscribCirclecenter.y()) +
+						(col - Obj_InscribCirclecenter.x())*(col - Obj_InscribCirclecenter.x());
+
+					if (distance < Obj_InscribCircleradius * Obj_InscribCircleradius)
+					{
+						object_center += v0;
+						object_count++;
+					}
+
+				}
+
+
+			if (object_count > 0) object_center /= object_count;
+			image_inputData.item[obj_id].center = object_center;
+
 		}
 	}
 }
