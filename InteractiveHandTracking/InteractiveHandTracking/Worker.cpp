@@ -2,6 +2,10 @@
 
 Worker::Worker(Camera* _camera, vector<Object_type>& object_type)
 {
+	fixed_contactPoints_local.clear();
+	fixed_contactPoints.clear();
+	fixed_contactPointsBelong.clear();
+	
 	mCamera = _camera;
 
 	//��ʼ���������
@@ -56,7 +60,11 @@ Worker::Worker(Camera* _camera, vector<Object_type>& object_type)
 void Worker::Tracking(Image_InputData& imageData, Glove_InputData& gloveData,
 	Eigen::VectorXf& hand_init, vector<Eigen::VectorXf>& object_init,
 	bool pre_success,
-	Eigen::VectorXf& pre_handPrams, vector<Eigen::VectorXf>& pre_objectParams)
+	Eigen::VectorXf& pre_handPrams, vector<Eigen::VectorXf>& pre_objectParams,
+	vector<int>& _fixed_PointsBelong,
+	vector<std::pair<int, Eigen::Vector4f>>& _fixed_contact_Points_local,
+	vector<Eigen::Matrix4f>& relative_Trans,
+	vector<Obj_status>& Obj_status_vector)
 {
 	if (pre_success)
 		setting->max_itr = 6;
@@ -67,23 +75,83 @@ void Worker::Tracking(Image_InputData& imageData, Glove_InputData& gloveData,
 	itr = 0;
 
 	Has_Glove = true;
-	//�����������ݣ�������ģ����ʼ��
+	//设置输入数据
 	mImage_InputData = &imageData;
 	Glove_params = gloveData.params;
 
+	//同步物体状态
+	{
+		if (Obj_status_vector.size() == mInteracted_Objects.size())
+		{
+			for (int obj_id = 0; obj_id < mInteracted_Objects.size(); ++obj_id)
+			{
+				mInteracted_Objects[obj_id]->mObj_status = Obj_status_vector[obj_id];
+			}
+		}
+
+		if (relative_Trans.size() == mInteracted_Objects.size())
+		{
+			for (int obj_id = 0; obj_id < mInteracted_Objects.size(); ++obj_id)
+			{
+				mInteracted_Objects[obj_id]->relative_Trans = relative_Trans[obj_id];
+			}
+		}
+
+		this->fixed_contactPoints_local.assign(_fixed_contact_Points_local.begin(), _fixed_contact_Points_local.end());
+		this->fixed_contactPointsBelong.assign(_fixed_PointsBelong.begin(), _fixed_PointsBelong.end());
+	}
 	SetHandInit(hand_init, pre_success, pre_handPrams);
 	SetObjectsInit(object_init, pre_success, pre_objectParams);
 	SetTemporalInfo(pre_success, pre_handPrams, pre_objectParams);
 	for (; itr < setting->max_itr; ++itr)
 	{
+		//更新固定的接触点
+		{
+			bool is_effect = false;
+			int Num_fixed_contactPoints = fixed_contactPoints_local.size();
+
+			for (int obj_id = 0; obj_id < mInteracted_Objects.size(); ++obj_id)
+			{
+				if ((!mInteracted_Objects[obj_id]->mObj_status.now_Detect) && mInteracted_Objects[obj_id]->mObj_status.pre_ContactWithHand)
+					is_effect = true;
+			}
+
+			if (is_effect && Num_fixed_contactPoints > 0)
+			{
+				fixed_contactPoints.resize(Num_fixed_contactPoints);
+
+				for (int i = 0; i < Num_fixed_contactPoints; ++i)
+				{
+					Eigen::MatrixXf obj_trans = mInteracted_Objects[fixed_contactPointsBelong[i]]->GetObjectTransMatrix();
+					fixed_contactPoints[i].second = (obj_trans * fixed_contactPoints_local[i].second).head(3);
+					fixed_contactPoints[i].first = fixed_contactPoints_local[i].first;
+				}
+			}
+		}
 		FindObjectCorrespond();
 		FindHandCorrespond();
 
 		Hand_one_tracking();
 		for (int obj_idx = 0; obj_idx < mInteracted_Objects.size(); ++obj_idx)
 		{
+			
 			if(mImage_InputData->item[obj_idx].now_detect)
 				Object_one_tracking(obj_idx);
+			else if (mInteracted_Objects[obj_idx]->mObj_status.pre_ContactWithHand)
+			{
+				Eigen::MatrixXf Hand_Trans = mHandModel->GetHandModelGlobalTransMatrix((Hand_Params.tail(NUM_HAND_POSE_PARAMS)).head(NUM_HAND_GLOBAL_PARAMS));
+				Eigen::MatrixXf relative_trans = Hand_Trans * mInteracted_Objects[obj_idx]->relative_Trans;
+
+				Eigen::Matrix3f T_rotate = relative_trans.block(0, 0, 3, 3);
+
+				Eigen::Vector3f obj_rotate = T_rotate.eulerAngles(0, 1, 2);
+				Eigen::Vector3f obj_trans(relative_trans(0, 3), relative_trans(1, 3), relative_trans(2, 3));
+
+				Object_params[obj_idx].head(3) = obj_trans;
+				Object_params[obj_idx].tail(3) = obj_rotate;
+
+				mInteracted_Objects[obj_idx]->Update(Object_params[obj_idx]);
+			}
 		}
 
 		total_itr++;
@@ -108,7 +176,8 @@ void Worker::SetObjectsInit(vector<Eigen::VectorXf>& object_init, bool pre_succe
 	//如果物体第一次出现（或者失去检测后重新出现），或者跟踪失败后，使用图像数据作为初始化
 	for (size_t obj_id = 0; obj_id < mInteracted_Objects.size(); ++obj_id)
 	{
-		if ((!pre_success) || mImage_InputData->item[obj_id].first_detect || mImage_InputData->item[obj_id].loss_detect)
+		if ((!pre_success) || mInteracted_Objects[obj_id]->mObj_status.first_appear 
+			|| mInteracted_Objects[obj_id]->mObj_status.lossTracking)
 		{
 			Object_params[obj_id] = object_init[obj_id];
 			mInteracted_Objects[obj_id]->Update(Object_params[obj_id]);
@@ -157,7 +226,7 @@ void Worker::SetTemporalInfo(bool pre_success, Eigen::VectorXf& pre_handPrams, v
 
 	for (int obj_idx = 0; obj_idx < mInteracted_Objects.size(); ++obj_idx)
 	{
-		if (mImage_InputData->item[obj_idx].first_detect || mImage_InputData->item[obj_idx].loss_detect)
+		if (mInteracted_Objects[obj_idx]->mObj_status.first_appear || mInteracted_Objects[obj_idx]->mObj_status.lossTracking)
 			while (!temporal_Object_params[obj_idx].empty()) temporal_Object_params[obj_idx].pop();
 	}
 }
@@ -371,6 +440,12 @@ void Worker::FindHandCorrespond()
 
 void Worker::Hand_one_tracking()
 {
+	setting->Hand_Shape_Damping_weight = 5000;
+	for (int obj_id = 0; obj_id < mInteracted_Objects.size(); ++obj_id)
+	{
+		if (mInteracted_Objects[obj_id]->mObj_status.pre_ContactWithHand)
+			setting->Hand_Shape_Damping_weight = 500000;
+	}
 	LinearSystem linear_system;
 	linear_system.lhs = Eigen::MatrixXf::Zero(NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS,
 		NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS);
@@ -397,6 +472,7 @@ void Worker::Hand_one_tracking()
 	this->CollisionLimit(linear_system);
 	Hand_Object_Collision(linear_system);
 	Hand_Object_Contact(linear_system);
+	FixContactPointsLimited(linear_system);
 	this->Damping(linear_system);
 	if (itr < setting->max_rigid_itr)
 		this->RigidOnly(linear_system);  //���һ��Ҫ�����
@@ -1022,7 +1098,7 @@ void Worker::Hand_Object_Collision(LinearSystem& linear_system)
 	{
 		for (int obj_idx = 0; obj_idx < mInteracted_Objects.size(); ++obj_idx)
 		{
-			if (!mImage_InputData->item[obj_idx].loss_detect)
+			if (!mInteracted_Objects[obj_idx]->mObj_status.lossTracking)
 			{
 				Eigen::Vector3f p(mHandModel->V_Final(v_id, 0), mHandModel->V_Final(v_id, 1), mHandModel->V_Final(v_id, 2));
 				if (mInteracted_Objects[obj_idx]->Is_inside(p))
@@ -1063,7 +1139,7 @@ void Worker::Hand_Object_Collision(LinearSystem& linear_system)
 
 void Worker::Hand_Object_Contact(LinearSystem& linear_system)
 {
-	const float THRESHOLD = 20.0f;
+	const float THRESHOLD = 10.0f;
 	vector<pair<int, Vector3>> hand_obj_contatct;
 
 	for (int v_id = 0; v_id < mHandModel->Vertex_num; ++v_id)
@@ -1072,7 +1148,7 @@ void Worker::Hand_Object_Contact(LinearSystem& linear_system)
 		{
 			for (int obj_idx = 0; obj_idx < mInteracted_Objects.size(); ++obj_idx)
 			{
-				if (!mImage_InputData->item[obj_idx].loss_detect)
+				if (!mInteracted_Objects[obj_idx]->mObj_status.lossTracking)
 				{
 					Eigen::Vector3f p(mHandModel->V_Final(v_id, 0), mHandModel->V_Final(v_id, 1), mHandModel->V_Final(v_id, 2));
 					if (!mInteracted_Objects[obj_idx]->Is_inside(p))
@@ -1158,9 +1234,12 @@ void Worker::Evaluation()
 	int rows = mCamera->height();
 	int cols = mCamera->width();
 
-	//��ͨ�����ֺ���������ɵ����ͼ�ϳ�һ����������ͼ���������ǰ���ϵ���кϲ�
-	for(int obj_idx = 0;obj_idx<mInteracted_Objects.size();++obj_idx)
-		mInteracted_Objects[obj_idx]->GenerateDepthAndSilhouette();
+	for (int obj_idx = 0; obj_idx < mInteracted_Objects.size(); ++obj_idx)
+	{
+		mInteracted_Objects[obj_idx]->ClearDepthAndSilhouette();
+		if (!mInteracted_Objects[obj_idx]->mObj_status.lossTracking)
+			mInteracted_Objects[obj_idx]->GenerateDepthAndSilhouette();
+	}
 
 	mRendered_Images.setToZero();
 

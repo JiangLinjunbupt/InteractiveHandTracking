@@ -131,6 +131,16 @@ void YellowSphere::Update(const Eigen::VectorXf& params)
 	this->UpdateVerticesAndNormal();
 }
 
+Eigen::MatrixXf YellowSphere::GetObjectTransMatrix()
+{
+	Eigen::Matrix4f TransMatrix = Eigen::Matrix4f::Identity();
+	TransMatrix(0, 3) = object_params(0);
+	TransMatrix(1, 3) = object_params(1);
+	TransMatrix(2, 3) = object_params(2);
+
+	return TransMatrix;
+}
+
 void YellowSphere::UpdateVerticesAndNormal()
 {
 	float width = mCamera->width();
@@ -181,6 +191,12 @@ void YellowSphere::UpdateVerticesAndNormal()
 }
 
 
+float YellowSphere::SDF(const Eigen::Vector3f& p)
+{
+	Vector3 C = Vector3(object_params(0), object_params(1), object_params(2));
+
+	return (C - p).norm() - mObject_attribute.radius;
+}
 
 bool YellowSphere::Is_inside(const Eigen::VectorXf& p)
 {

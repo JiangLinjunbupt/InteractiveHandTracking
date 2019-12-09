@@ -14,7 +14,11 @@ SolverManager::SolverManager(int start_points, Camera* _camera, vector<Object_ty
 void SolverManager::Solve(Image_InputData& imageData, Glove_InputData& gloveData,
 	vector<Eigen::VectorXf>& hand_init, vector<vector<Eigen::VectorXf>>& object_init,
 	bool pre_success,
-	Eigen::VectorXf& pre_handPrams, vector<Eigen::VectorXf>& pre_objectParams)
+	Eigen::VectorXf& pre_handPrams, vector<Eigen::VectorXf>& pre_objectParams,
+	vector<int>& _fixed_PointsBelong,
+	vector<std::pair<int, Eigen::Vector4f>>& _fixed_contact_Points_local,
+	vector<Eigen::Matrix4f>& relative_Trans,
+	vector<Obj_status>& Obj_status_vector)
 {
 	std::vector<std::thread> threads;
 
@@ -26,7 +30,11 @@ void SolverManager::Solve(Image_InputData& imageData, Glove_InputData& gloveData
 			imageData, gloveData,
 			hand_init[i], object_init[i],
 			pre_success,
-			pre_handPrams, pre_objectParams));
+			pre_handPrams, pre_objectParams,
+			_fixed_PointsBelong,
+			_fixed_contact_Points_local,
+			relative_Trans,
+			Obj_status_vector));
 	}
 	for (auto & th : threads)
 		th.join();

@@ -284,6 +284,20 @@ public:
 	cv::Mat HandModel_depthMap;
 	cv::Mat HandModel_binaryMap;
 	void GenerateDepthMap();
+
+	Eigen::MatrixXf GetHandModelGlobalTransMatrix(const Eigen::VectorXf& global_params)
+	{
+		Eigen::Matrix4f T = Eigen::Matrix4f::Identity();
+		T(0, 3) = global_params[0];
+		T(1, 3) = global_params[1];
+		T(2, 3) = global_params[2];
+
+		Eigen::Matrix4f Rotate_0 = Eigen::Matrix4f::Identity();
+		Rotate_0.block(0, 0, 3, 3) = EularToRotateMatrix(global_params[3], global_params[4], global_params[5]);
+
+
+		return T * this->Trans_child_to_parent[0] * Rotate_0 * this->Trans_world_to_local[0];
+	}
 };
 
 

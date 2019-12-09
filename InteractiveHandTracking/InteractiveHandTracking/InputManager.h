@@ -28,6 +28,6 @@ public:
 	void ShowImage_input(bool show_obj, bool show_hand, bool show_color);
 
 private:
-	void Judge_ObjFistAppear();
+	void UpdataObjStatus();
 };
 

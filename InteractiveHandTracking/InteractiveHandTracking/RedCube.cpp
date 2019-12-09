@@ -370,6 +370,18 @@ void RedCube::Update(const Eigen::VectorXf& params)
 	this->UpdateVerticesAndNormal();
 }
 
+Eigen::MatrixXf RedCube::GetObjectTransMatrix()
+{
+	Eigen::Matrix4f TransMatrix = Eigen::Matrix4f::Identity();
+	TransMatrix(0, 3) = object_params(0);
+	TransMatrix(1, 3) = object_params(1);
+	TransMatrix(2, 3) = object_params(2);
+
+	Eigen::Matrix4f RotateMatrix = Eigen::Matrix4f::Identity();
+	RotateMatrix.block(0, 0, 3, 3) = EularToRotateMatrix(object_params(3), object_params(4), object_params(5));
+
+	return TransMatrix * RotateMatrix;
+}
 
 void RedCube::UpdateVerticesAndNormal()
 {
@@ -432,8 +444,31 @@ void RedCube::UpdateVerticesAndNormal()
 	Coordinate.col(0) = (updataMatrix * X_tmp).head(3);
 	Coordinate.col(1) = (updataMatrix * Y_tmp).head(3);
 	Coordinate.col(2) = (updataMatrix * Z_tmp).head(3);
+
+	T_local.setIdentity();
+	T_local.block(0, 0, 3, 3) = Coordinate;
+	T_local(0, 3) = object_params(0);
+	T_local(1, 3) = object_params(1);
+	T_local(2, 3) = object_params(2);
+
+	T_local_inverse = T_local.inverse();
 }
 
+
+float RedCube::SDF(const Eigen::Vector3f& p)
+{
+	float Half_Len = mObject_attribute.length / 2.0f;
+
+	Eigen::Vector4f p_tmp(p(0), p(1), p(2), 1);
+	Vector3 p_local = (T_local_inverse *p_tmp).head(3);
+
+	Vector3 diff;
+	diff << max(abs(p_local.x()) - Half_Len, 0.0f),
+		max(abs(p_local.y()) - Half_Len, 0.0f),
+		max(abs(p_local.z()) - Half_Len, 0.0f);
+
+	return diff.norm();
+}
 
 bool RedCube::Is_inside(const Eigen::VectorXf& p)
 {

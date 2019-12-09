@@ -36,6 +36,8 @@ using namespace std::chrono;
 
 
 
+
+
 typedef Eigen::Matrix4f Matrix4;
 typedef Eigen::Matrix<float, 3, 3> Matrix3;
 typedef Eigen::Matrix<float, 2, 3> Matrix_2x3;
@@ -50,6 +52,57 @@ typedef Eigen::Vector3f Vector3;
 inline float nan() { return (std::numeric_limits<float>::quiet_NaN)(); }
 inline float inf() { return (std::numeric_limits<float>::max)(); }
 
+struct Obj_status
+{
+	bool pre_Detect;
+	bool now_Detect;
+
+	bool pre_ContactWithHand;   //这个要注意，只有当 now_Detect = true时候，才更新
+
+	bool loss_LongTime;
+	bool lossTracking;
+
+	bool first_appear;
+
+	Obj_status()
+	{
+		pre_Detect = false;
+		now_Detect = false;
+
+		pre_ContactWithHand = false;
+
+		loss_LongTime = true;
+		lossTracking = ((loss_LongTime) && (!pre_ContactWithHand));
+
+		first_appear = false;
+	}
+
+	Obj_status(const Obj_status& obj_status)
+	{
+		pre_Detect = obj_status.pre_Detect;
+		now_Detect = obj_status.now_Detect;
+
+		pre_ContactWithHand = obj_status.pre_ContactWithHand;
+
+		loss_LongTime = obj_status.loss_LongTime;
+		lossTracking = obj_status.lossTracking;
+
+		first_appear = obj_status.first_appear;
+	}
+
+	void operator=(const Obj_status& obj_status)
+	{
+		pre_Detect = obj_status.pre_Detect;
+		now_Detect = obj_status.now_Detect;
+
+		pre_ContactWithHand = obj_status.pre_ContactWithHand;
+
+		loss_LongTime = obj_status.loss_LongTime;
+		lossTracking = obj_status.lossTracking;
+
+		first_appear = obj_status.first_appear;
+	}
+};
 /// Linear system lhs*x=rhs
 struct LinearSystem {
 	Matrix_MxN lhs; // J^T*J
@@ -125,11 +178,10 @@ struct Object_input
 	cv::Mat depth;
 	Vector3 center;
 
-	int not_detect_count;
+	int loss_detect_count;
 	bool now_detect;
 	bool pre_detect;
-	bool first_detect;
-	bool loss_detect;
+	bool loss_LongTime;
 
 	void Init(const int W, const int H)
 	{
@@ -139,11 +191,10 @@ struct Object_input
 		pointcloud.points.clear();
 		pointcloud.points.reserve(W*H);
 
-		not_detect_count = 0;
+		loss_detect_count = 0;
 		now_detect = false;
 		pre_detect = false;
-		first_detect = false;
-		loss_detect = true;
+		loss_LongTime = true;
 	}
 
 	void operator=(const Object_input& obj_input)
@@ -153,11 +204,10 @@ struct Object_input
 		depth = obj_input.depth.clone();
 		center = obj_input.center;
 
-		not_detect_count = obj_input.not_detect_count;
+		loss_detect_count = obj_input.loss_detect_count;
 		now_detect = obj_input.now_detect;
 		pre_detect = obj_input.pre_detect;
-		first_detect = obj_input.first_detect;
-		loss_detect = obj_input.loss_detect;
+		loss_LongTime = obj_input.loss_LongTime;
 	}
 
 	void UpdateStatus(bool is_detect)
@@ -166,16 +216,16 @@ struct Object_input
 
 		if (is_detect)
 		{
-			not_detect_count = 0;
+			loss_detect_count = 0;
 			now_detect = true;
-			loss_detect = false;
+			loss_LongTime = false;
 		}
 		else
 		{
-			not_detect_count++;
+			loss_detect_count++;
 			now_detect = false;
-			if (not_detect_count > LOSS_DETECT_THRESHOLD)
-				loss_detect = true;
+			if (loss_detect_count > LOSS_DETECT_THRESHOLD)
+				loss_LongTime = true;
 		}
 	}
 

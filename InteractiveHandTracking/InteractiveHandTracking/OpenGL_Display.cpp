@@ -231,7 +231,7 @@ namespace DS
 		glEnable(GL_LIGHTING);
 		for (size_t obj_idx = 0; obj_idx < mTrackingManager->mInteracted_Object.size(); ++obj_idx)
 		{
-			if (mTrackingManager->mInputManager->mInputData.image_data.item[obj_idx].now_detect)
+			//if (mTrackingManager->mInputManager->mInputData.image_data.item[obj_idx].now_detect)
 			{
 				GLfloat Sphere_ambient[] = { mTrackingManager->mInteracted_Object[obj_idx]->mObject_attribute.color(0),
 					mTrackingManager->mInteracted_Object[obj_idx]->mObject_attribute.color(1),

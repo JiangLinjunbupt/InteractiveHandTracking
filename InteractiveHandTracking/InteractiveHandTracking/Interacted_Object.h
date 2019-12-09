@@ -26,6 +26,8 @@ protected:
 	virtual void UpdateVerticesAndNormal() = 0;
 
 public:
+	Obj_status mObj_status;
+	Eigen::Matrix4f relative_Trans;
 	//运动参数
 	Eigen::VectorXf object_params;
 	int Num_object_prams;
@@ -57,6 +59,11 @@ public:
 
 	virtual ~Interacted_Object() {}
 	virtual void GenerateDepthAndSilhouette() = 0;
+	void ClearDepthAndSilhouette()
+	{
+		this->generatedDepth.setTo(0);
+		this->generatedSilhouette.setTo(0);
+	}
 	virtual void ShowDepth() = 0;
 	virtual void Update(const Eigen::VectorXf& params) = 0;
 
@@ -76,9 +83,13 @@ public:
 		jacobain.col(4) = (y_jacob * tmp).head(3);
 		jacobain.col(5) = (z_jacob * tmp).head(3);
 	}
+
+	virtual float SDF(const Eigen::Vector3f& p) = 0;
 	virtual bool Is_inside(const Eigen::VectorXf& p) = 0;
 	virtual Eigen::VectorXf FindTarget(const Eigen::VectorXf& p) = 0;
 	virtual Eigen::VectorXf FindTouchPoint(const Eigen::VectorXf& p) = 0;
+	virtual Eigen::MatrixXf GetObjectTransMatrix() = 0;
+
 protected:
 	Eigen::Matrix3f EularToRotateMatrix(float x, float y, float z)
 	{
@@ -155,9 +166,11 @@ public:
 	void GenerateDepthAndSilhouette();
 	void ShowDepth();
 	void Update(const Eigen::VectorXf& params);
+	float SDF(const Eigen::Vector3f& p);
 	bool Is_inside(const Eigen::VectorXf& p);
 	Eigen::VectorXf FindTarget(const Eigen::VectorXf& p);
 	Eigen::VectorXf FindTouchPoint(const Eigen::VectorXf& p);
+	Eigen::MatrixXf GetObjectTransMatrix();
 };
 
 
@@ -166,6 +179,9 @@ class RedCube :public Interacted_Object
 private:
 	Eigen::Matrix<float, 8, 3> FinalCornerPoints;
 	Eigen::Matrix<float, 3, 3> Coordinate;
+	Eigen::Matrix4f T_local;
+	Eigen::Matrix4f T_local_inverse;
+
 protected:
 	void GenerateOrLoadPointsAndNormal();
 	void UpdateVerticesAndNormal();
@@ -176,7 +192,9 @@ public:
 	void GenerateDepthAndSilhouette();
 	void ShowDepth();
 	void Update(const Eigen::VectorXf& params);
+	float SDF(const Eigen::Vector3f& p);
 	bool Is_inside(const Eigen::VectorXf& p);
 	Eigen::VectorXf FindTarget(const Eigen::VectorXf& p);
 	Eigen::VectorXf FindTouchPoint(const Eigen::VectorXf& p);
+	Eigen::MatrixXf GetObjectTransMatrix();
 };

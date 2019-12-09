@@ -31,6 +31,11 @@ TrackingManager::TrackingManager(GlobalSetting& setting)
 	pre_HandParams = Eigen::VectorXf::Zero(NUM_HAND_SHAPE_PARAMS + NUM_HAND_POSE_PARAMS);
 	is_success = false;
 	mRendered_Images.init(mCamera->width(), mCamera->height());
+
+	fixed_point_belong.clear();
+	fixed_contact_Points_local.clear();
+	relative_Trans.clear();
+	Obj_status_vector.clear();
 }
 
 bool TrackingManager::FetchInput()
@@ -163,16 +168,32 @@ void TrackingManager::Tracking(bool do_tracking)
 {
 	if (FetchInput())
 	{
+		Obj_StatusJudgement();
+		FoundContactPoints();
+
+		cout << endl;
+		cout << "------------------------------------------" << endl;
+		cout << "当前物体的状态如下：" << endl;
+		cout << "pre_detect : " << Obj_status_vector[0].pre_Detect << endl;
+		cout << "now_detect : " << Obj_status_vector[0].now_Detect << endl;
+		cout << "pre_contactWithHand : " << Obj_status_vector[0].pre_ContactWithHand << endl;
+		cout << "LossTracking : " << Obj_status_vector[0].lossTracking << endl;
+		cout << "----------------------------------------------" << endl;
 		if (do_tracking)
 		{
 			vector<Eigen::VectorXf> hand_init;
 			vector<vector<Eigen::VectorXf>> obj_init;
 
 			GeneratedStartPoints(hand_init,obj_init);
+
 			mSolverManager->Solve(mInputManager->mInputData.image_data, mInputManager->mInputData.glove_data,
 				hand_init, obj_init,
 				is_success,
-				pre_HandParams, pre_ObjParams);
+				pre_HandParams, pre_ObjParams,
+				fixed_point_belong,
+				fixed_contact_Points_local,
+				relative_Trans,
+				Obj_status_vector);
 
 			float tracking_error;
 			mSolverManager->GetBestEstimation(tracking_error, is_success, pre_HandParams, pre_ObjParams,mRendered_Images);
@@ -246,4 +267,45 @@ void TrackingManager::ShowRenderAddColor()
 	}
 
 	cv::imshow("ColorAndDepth", tmpColor);
+}
+
+void TrackingManager::FoundContactPoints()
+{
+	fixed_point_belong.clear();
+	fixed_contact_Points_local.clear();
+	relative_Trans.clear();
+
+	for (int obj_id = 0; obj_id < mInteracted_Object.size(); ++obj_id)
+	{
+		//之前物体的变换
+		Eigen::MatrixXf Obj_Trans = mInteracted_Object[obj_id]->GetObjectTransMatrix();
+		Eigen::MatrixXf Hand_Trans = mHandModel->GetHandModelGlobalTransMatrix((pre_HandParams.tail(NUM_HAND_POSE_PARAMS)).head(NUM_HAND_GLOBAL_PARAMS));
+
+		//相对变换
+		relative_Trans.push_back(Hand_Trans.inverse() * Obj_Trans);
+
+		if (mInteracted_Object[obj_id]->mObj_status.pre_Detect 
+			&& mInteracted_Object[obj_id]->mObj_status.pre_ContactWithHand
+			&& (!mInteracted_Object[obj_id]->mObj_status.now_Detect))
+		{
+			for (int v_id = 0; v_id < mHandModel->Vertex_num; ++v_id)
+			{
+				//这里偷个懒，就判断常见交互点与物体是否有交互即可 
+				if (mHandModel->contactPoints[v_id] == 1)
+				{
+					Vector3 p(mHandModel->V_Final(v_id, 0), mHandModel->V_Final(v_id, 1), mHandModel->V_Final(v_id, 2));
+					if (mInteracted_Object[obj_id]->SDF(p) < 10.0f)
+					{
+						Vector3 contactPoint = mInteracted_Object[obj_id]->FindTouchPoint(p);
+						Eigen::Vector4f tmp_contactPoint(contactPoint(0), contactPoint(1), contactPoint(2), 1);
+						//然后将这个接触点反变换回去
+						Eigen::Vector4f local_contactPoint = Obj_Trans.inverse() * tmp_contactPoint;
+
+						fixed_contact_Points_local.emplace_back(make_pair(v_id, local_contactPoint));
+						fixed_point_belong.push_back(obj_id);
+					}
+				}
+			}
+		}
+	}
 }
