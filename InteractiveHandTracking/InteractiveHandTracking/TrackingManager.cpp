@@ -20,6 +20,9 @@ TrackingManager::TrackingManager(GlobalSetting& setting)
 		case redCube:
 			tmpObject = new RedCube(mCamera);
 			break;
+		case greenCylinder:
+			tmpObject = new GreenCylinder(mCamera);
+			break;
 		default:
 			break;
 		}
@@ -171,14 +174,14 @@ void TrackingManager::Tracking(bool do_tracking)
 		Obj_StatusJudgement();
 		FoundContactPoints();
 
-		cout << endl;
+		/*cout << endl;
 		cout << "------------------------------------------" << endl;
 		cout << "当前物体的状态如下：" << endl;
 		cout << "pre_detect : " << Obj_status_vector[0].pre_Detect << endl;
 		cout << "now_detect : " << Obj_status_vector[0].now_Detect << endl;
 		cout << "pre_contactWithHand : " << Obj_status_vector[0].pre_ContactWithHand << endl;
 		cout << "LossTracking : " << Obj_status_vector[0].lossTracking << endl;
-		cout << "----------------------------------------------" << endl;
+		cout << "----------------------------------------------" << endl;*/
 		if (do_tracking)
 		{
 			vector<Eigen::VectorXf> hand_init;

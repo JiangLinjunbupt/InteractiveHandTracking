@@ -414,6 +414,10 @@ void RealSenseSensor::SegObject(cv::Mat& depth, cv::Mat& hsv)
 			object_hmin = 300; object_smin = 130; object_vmin = 80;
 			object_hmax = 360; object_smax = 255; object_vmax = 255;
 			break;
+		case greenCylinder:
+			object_hmin = 116; object_smin = 93; object_vmin = 37;
+			object_hmax = 163; object_smax = 255; object_vmax = 255;
+			break;
 		default:
 			object_hmin = 0; object_smin = 0; object_vmin = 0;
 			object_hmax = 360; object_smax = 255; object_vmax = 255;

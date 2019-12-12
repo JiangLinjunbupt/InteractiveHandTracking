@@ -27,6 +27,9 @@ Worker::Worker(Camera* _camera, vector<Object_type>& object_type)
 		case redCube:
 			tmpObject = new RedCube(mCamera);
 			break;
+		case greenCylinder:
+			tmpObject = new GreenCylinder(mCamera);
+			break;
 		default:
 			break;
 		}

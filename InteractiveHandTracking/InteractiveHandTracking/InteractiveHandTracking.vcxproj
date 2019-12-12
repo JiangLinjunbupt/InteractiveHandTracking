@@ -111,6 +111,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Camera.cpp" />
+    <ClCompile Include="OrangeCylinder.cpp" />
     <ClCompile Include="Glove.cpp" />
     <ClCompile Include="HandModel.cpp" />
     <ClCompile Include="InputManager.cpp" />

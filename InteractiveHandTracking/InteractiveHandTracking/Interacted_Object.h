@@ -9,11 +9,12 @@ struct Object_attribute
 	//可能的属性
 	Vector3 color;
 
-	float radius; //为球体准备的半径
+	float radius; //为球体和圆柱体准备的半径
 	
 	float length;
 	Eigen::MatrixXf CornerPoints; //为立方体准备的角点
 
+	float height;  //为圆柱体准备
 };
 class Interacted_Object
 {
@@ -53,8 +54,8 @@ public:
 		generatedSilhouette = cv::Mat(cv::Size(mCamera->width(), mCamera->height()), CV_8UC1, cv::Scalar(0));
 
 		//所有的物体都是由旋转和平移，一共6个参数组成
-		Num_object_prams = 6;
-		object_params = Eigen::VectorXf::Zero(6);
+		Num_object_prams = NUM_OBJECT_PARAMS;
+		object_params = Eigen::VectorXf::Zero(Num_object_prams);
 	};
 
 	virtual ~Interacted_Object() {}
@@ -153,7 +154,6 @@ protected:
 	}
 };
 
-
 class YellowSphere : public Interacted_Object
 {
 protected:
@@ -173,7 +173,6 @@ public:
 	Eigen::MatrixXf GetObjectTransMatrix();
 };
 
-
 class RedCube :public Interacted_Object
 {
 private:
@@ -188,6 +187,30 @@ protected:
 public:
 	RedCube(Camera* camera);
 	virtual ~RedCube() {};
+
+	void GenerateDepthAndSilhouette();
+	void ShowDepth();
+	void Update(const Eigen::VectorXf& params);
+	float SDF(const Eigen::Vector3f& p);
+	bool Is_inside(const Eigen::VectorXf& p);
+	Eigen::VectorXf FindTarget(const Eigen::VectorXf& p);
+	Eigen::VectorXf FindTouchPoint(const Eigen::VectorXf& p);
+	Eigen::MatrixXf GetObjectTransMatrix();
+};
+
+class GreenCylinder :public Interacted_Object
+{
+private:
+	Eigen::Matrix<float, 3, 3> Coordinate;
+	Eigen::Matrix4f T_local;
+	Eigen::Matrix4f T_local_inverse;
+
+protected:
+	void GenerateOrLoadPointsAndNormal();
+	void UpdateVerticesAndNormal();
+public:
+	GreenCylinder(Camera* camera);
+	virtual ~GreenCylinder() {};
 
 	void GenerateDepthAndSilhouette();
 	void ShowDepth();

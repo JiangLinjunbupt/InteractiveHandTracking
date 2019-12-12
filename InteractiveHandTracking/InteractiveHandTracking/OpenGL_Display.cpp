@@ -394,7 +394,7 @@ namespace DS
 		draw_HandPointCloud();
 		//draw_HandPointCloudNormal();
 		draw_ObjectCloud();
-		//draw_ObjectCloudNormal();
+		draw_ObjectCloudNormal();
 		draw_Coordinate();
 
 		glFlush();

@@ -127,7 +127,7 @@ struct DataAndCorrespond
 	bool is_match;
 };
 
-enum Object_type { yellowSphere, redCube };
+enum Object_type { yellowSphere, redCube,greenCylinder};
 
 enum RuntimeType
 {
